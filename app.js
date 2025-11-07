@@ -1,7 +1,7 @@
 import Hyperswarm from 'hyperswarm';
 import b4a from 'b4a';
 import crypto from 'hypercore-crypto';
-import { addAlphaToColor, getRandomColorPair } from "./helper.js";
+import loadIcons, { addAlphaToColor, getRandomColorPair } from "./helper.js";
 import {Room, room} from "./Room/room.js";
 
 import {globalState} from "./storage/GlobalState.js";
@@ -2672,119 +2672,111 @@ if (!window.__WB_EVENTS_BOUND__) {
     await displayStates(states)
   })
 
-  ui.slideIconBtn.addEventListener('click', async () => {
-    console.log('Clickeddd')
-    await displayIcons()
-  })
-
   async function displayIcons() {
-    document.addEventListener('click', (event) => {
-      if (ui.slideIconContainer && !ui.slideIconContainer.classList.contains('hidden')) {
-        if (!ui.slideIconContainer.contains(event.target) && !ui.slideIconBtn.contains(event.target)) {
-          ui.slideIconContainer.classList.add('hidden');
-        }
-      }
-    });
+    const imageFiles = await loadIcons();
 
-    ui.slideIconContainer.addEventListener('click', (event) => {
-      event.stopPropagation();
-    });
-    ui.slideIconContainer.classList.remove('hidden');
-
-    if (!states || states.length === 0) {
-      const emptyContainer = document.createElement('div');
-      emptyContainer.className = 'empty-states';
-      emptyContainer.innerHTML = `
-            <div class="states-container-header">
-                <h3>Icons</h3>
-                <button class="slide-state-close">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <p class="no-states-message">No icons available</p>
-        `;
-
-      const closeButton = emptyContainer.querySelector('.slide-state-close');
-      closeButton.addEventListener('click', () => {
-        ui.slideIconContainer.classList.add('hidden');
-      });
-
-      ui.slideIconContainer.innerHTML = '';
-      ui.slideIconContainer.appendChild(emptyContainer);
+    if (!ui.slideIconContainer.classList.contains('hidden')) {
+      ui.slideIconContainer.classList.add('hidden');
       return;
     }
 
-    // Create container header with close button
-    const containerHeader = document.createElement('div');
-    containerHeader.className = 'states-container-header';
-    containerHeader.innerHTML = `
-        <h3>States</h3>
-        <button class="slide-state-close">
-            <i class="fas fa-times"></i>
+    ui.slideIconContainer.classList.remove('hidden');
+
+    if (imageFiles.length === 0) {
+      const emptyContainer = document.createElement('div');
+      emptyContainer.className = 'empty-icons';
+      emptyContainer.innerHTML = `
+      <div class="icons-container-header">
+        <h3>Icons</h3>
+        <button class="slide-icon-close">
+          <i class="fas fa-times"></i>
         </button>
+      </div>
+      <div class="no-icons-message">
+        <p>No icons available</p>
+      </div>
     `;
 
-    // Add click handler to close button
-    const closeButton = containerHeader.querySelector('.slide-state-close');
-    closeButton.addEventListener('click', () => {
-      ui.slideIconContainer.classList.add('hidden');
-    });
+      const closeButton = emptyContainer.querySelector('.slide-icon-close');
+      closeButton.addEventListener('click', () => {
+        ui.slideIconContainer.classList.add('hidden');
+      });
+      return;
+    }
+    const containerHeader = document.createElement('div');
+    containerHeader.className = 'icons-container-header';
+    containerHeader.innerHTML = `
+       <div class="icons-container-header">
+        <h3>Icons</h3>
+        <button class="slide-icon-close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+         `;
 
-    // Create states list
-    const statesList = document.createElement('ul');
-    statesList.className = 'states-list';
+    const iconsList = document.createElement('ul');
+    iconsList.className = 'icons-list';
 
-    // Add states to the list
-    states.forEach((state, index) => {
-      const stateItem = document.createElement('li');
-      stateItem.className = 'state-item';
+    imageFiles.forEach((iconFile, index) => {
+      const iconItem = document.createElement('li');
+      iconItem.className = 'icon-item';
+      iconItem.dataset.index = index;
 
-      // Format timestamp
-      const timestamp = new Date(state.savedAt).toLocaleString();
-      const objectCount = state.order?.length || 0;
+      const iconPath = `./assets/board_icons/${iconFile}`;
 
-      stateItem.innerHTML = `
-            <div class="state-info" data-index="${index}">
-                <img class="state-thumbnail" src="${state.thumbnail}" alt="State preview">
-                <div class="state-details">
-                    <h5 class="state-index" style="background: #ffffff;padding: 4px;border-radius: 4px;">State ${index + 1}</h5>
-                    <div style="display: flex; flex-direction: row; width: 100%; justify-content: space-between; flex-wrap: wrap;">
-                    <p class="state-timestamp">${new Date(state.savedAt).toLocaleString()}</p>
-                    <p class="object-count hidden">${state.order?.length || 0} objects</p>
-                    <p class="saved-by">by ${state.savedBy}</p>
-                    </div>
-                    <i class="fas fa-trash delete-state" title="Delete room"></i>
-                </div>
-            </div>
-        `;
+      iconItem.innerHTML = `
+      <div class="icon-info" data-index="${index}">
+        <img class="icon-thumbnail" src="${iconPath}" alt="Icon preview">
+        <div class="icon-details">
+          <h5 class="icon-name">${iconFile}</h5>
+          <p class="icon-type">Icon</p>
+        </div>
+      </div>
+    `;
 
-      const deleteButton = stateItem.querySelector('.delete-state');
-      deleteButton.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation()
-        const updatedStates = await room.deleteState(state.roomKey, index);
-        console.log('Updated states:', updatedStates)
-        await displayStates(updatedStates)
-        alert('State deleted successfully!');
-      })
-
-      stateItem.addEventListener('click', () => {
-        Room.applyDrawingState(state);
+      // Add click handler to select icon
+      iconItem.addEventListener('click', () => {
+        const img = new Image();
+        img.onload = () => {
+          const iconObj = {
+            id: state.generateRandomId(),
+            type: 'image',
+            x: 100,
+            y: 100,
+            w: img.width,
+            h: img.height,
+            src: iconPath,
+            createdBy: state.localPeerId,
+            rev: 0
+          };
+          DocumentManager.addObject(iconObj, true);
+        };
+        img.src = iconPath;
       });
 
-      statesList.appendChild(stateItem);
+      iconsList.appendChild(iconItem);
     });
 
     // Create wrapper for scrollable content
     const contentWrapper = document.createElement('div');
-    contentWrapper.className = 'states-content-wrapper';
-    contentWrapper.appendChild(statesList);
+    contentWrapper.className = 'icons-content-wrapper';
+    contentWrapper.appendChild(iconsList);
 
-    // Clear container and add new elements
-    ui.slideIconContainer.innerHTML = '';
+    // Clear and populate container
     ui.slideIconContainer.appendChild(containerHeader);
     ui.slideIconContainer.appendChild(contentWrapper);
   }
+
+  ui.slideIconBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    console.log('Icon button clicked');
+    await displayIcons();
+  });
+
+  ui.slideIconCloseBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ui.slideIconContainer.classList.add('hidden');
+  });
 
   async function displayStates(states) {
     const container = document.getElementById('slide-state-container');
