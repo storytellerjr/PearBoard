@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 15:12:16'
+export const BUILD_STAMP = 'build 15:33:01'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -782,11 +782,30 @@ class ObjectRenderer {
 
     if (!entry.loaded) return;
 
+    const ctx = state.ctx;
     const w = obj.w || entry.img.width;
     const h = obj.h || entry.img.height;
-    state.ctx.globalAlpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
-    state.ctx.drawImage(entry.img, obj.x, obj.y, w, h);
-    state.ctx.globalAlpha = 1;
+
+    ctx.globalAlpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
+
+    // A backing panel behind the artwork, so an icon can sit on a colour.
+    if (obj.backgroundColor && obj.backgroundColor !== 'transparent') {
+      const pad = 10;
+      const r = this.cornerRadius(obj, w + pad * 2, h + pad * 2);
+
+      ctx.beginPath();
+      if (r > 0 && typeof ctx.roundRect === 'function') {
+        ctx.roundRect(obj.x - pad, obj.y - pad, w + pad * 2, h + pad * 2, r);
+      } else {
+        ctx.rect(obj.x - pad, obj.y - pad, w + pad * 2, h + pad * 2);
+      }
+      this.fillShape(obj);
+    }
+
+    ctx.drawImage(entry.img, obj.x, obj.y, w, h);
+    ctx.globalAlpha = 1;
+
+    this.renderLabel(obj);
   }
 
   static renderPath(obj) {
@@ -1047,11 +1066,13 @@ class ObjectRenderer {
     ctx.globalAlpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
     ctx.font = `${size}px ${family}`;
     ctx.fillStyle = obj.labelColor || '#1e1e1e';
-    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    const align = obj.labelAlign || 'center';
+    ctx.textAlign = align;
+
     // Diamonds taper, so their usable width is about half the box.
-    const inset = obj.type === 'diamond' ? 0.5 : 0.85;
+    const inset = obj.type === 'diamond' ? 0.5 : obj.type === 'image' ? 1.1 : 0.85;
     const maxWidth = Math.max(20, b.w * inset);
 
     // An arrow has no body to sit in, so clear the line behind the words.
@@ -1059,17 +1080,36 @@ class ObjectRenderer {
 
     const lines = this.wrapText(text, maxWidth);
     const lineHeight = size * 1.25;
-    const startY = b.y + b.h / 2 - ((lines.length - 1) * lineHeight) / 2;
-    const centreX = b.x + b.w / 2;
+
+    // An image's text is a caption: it belongs under the artwork, not across
+    // the middle of it. Everything else centres in its shape.
+    const startY = obj.type === 'image'
+      ? b.y + b.h + lineHeight * 0.9
+      : b.y + b.h / 2 - ((lines.length - 1) * lineHeight) / 2;
+
+    // Where each line is anchored depends on the alignment; the inset keeps
+    // left- and right-aligned text off the shape's own outline.
+    const margin = (b.w - maxWidth) / 2;
+    const centreX = align === 'left'
+      ? b.x + margin
+      : align === 'right'
+        ? b.x + b.w - margin
+        : b.x + b.w / 2;
 
     lines.forEach((line, i) => {
       const y = startY + i * lineHeight;
 
       if (onArrow) {
         const w = ctx.measureText(line).width;
+        const left = align === 'left'
+          ? centreX
+          : align === 'right'
+            ? centreX - w
+            : centreX - w / 2;
+
         ctx.save();
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(centreX - w / 2 - 4, y - lineHeight / 2, w + 8, lineHeight);
+        ctx.fillRect(left - 4, y - lineHeight / 2, w + 8, lineHeight);
         ctx.restore();
       }
 
@@ -2033,7 +2073,11 @@ class LabelEditor {
     // Place the editor centred on the shape rather than at its top-left. An
     // arrow's box is a pixel or two tall when it runs straight across, so
     // anchoring to the top put the words above the line instead of on it.
-    const centre = CoordinateUtils.worldToScreen(b.x + b.w / 2, b.y + b.h / 2);
+    // An image's caption sits under it, so the editor opens there too.
+    const anchorY = obj.type === 'image'
+      ? b.y + b.h + (obj.labelSize || 20) * 0.9
+      : b.y + b.h / 2;
+    const centre = CoordinateUtils.worldToScreen(b.x + b.w / 2, anchorY);
     const boxWidth = Math.max(b.w * state.zoom, 120);
     const boxHeight = Math.max(b.h * state.zoom, lineHeight * 1.6);
 
@@ -2053,7 +2097,7 @@ class LabelEditor {
       fontSize: `${size * state.zoom}px`,
       lineHeight: '1.25',
       color: obj.labelColor || '#1e1e1e',
-      textAlign: 'center',
+      textAlign: obj.labelAlign || 'center',
       background: 'transparent',
       border: 'none',
       outline: 'none',
@@ -2565,7 +2609,7 @@ class InputHandler {
       if (!id) return;
 
       const obj = state.doc.objects[id];
-      if (!obj || !['rect', 'ellipse', 'diamond', 'arrow'].includes(obj.type)) return;
+      if (!obj || !['rect', 'ellipse', 'diamond', 'arrow', 'image'].includes(obj.type)) return;
 
       e.preventDefault();
       state.selectedId = id;
@@ -2882,7 +2926,7 @@ class InputHandler {
         const id = DocumentManager.findTopObjectAt(coords.x, coords.y);
         const obj = id ? state.doc.objects[id] : null;
 
-        if (obj && ['rect', 'ellipse', 'diamond', 'arrow'].includes(obj.type)) {
+        if (obj && ['rect', 'ellipse', 'diamond', 'arrow', 'image'].includes(obj.type)) {
           state.drawing = false;
           state.selectedId = id;
           LabelEditor.open(obj);
@@ -2997,7 +3041,7 @@ class InputHandler {
     // With the text tool, show which object would receive the text.
     if (state.tool === 'text') {
       const obj = objectId ? state.doc.objects[objectId] : null;
-      const labelable = obj && ['rect', 'ellipse', 'diamond', 'arrow'].includes(obj.type);
+      const labelable = obj && ['rect', 'ellipse', 'diamond', 'arrow', 'image'].includes(obj.type);
       ui.canvas.style.cursor = 'text';
       if (!labelable && state.hoverId) {
         state.hoverId = null;
@@ -3786,7 +3830,7 @@ class UIManager {
         btn.addEventListener('click', () => {
           state.textAlign = btn.dataset.align;
           setActive(alignRow, (b) => b.dataset.align === btn.dataset.align);
-          applyToSelection({ align: btn.dataset.align });
+          applyToSelection({ align: btn.dataset.align, labelAlign: btn.dataset.align });
         });
       });
       setActive(alignRow, (b) => b.dataset.align === state.textAlign);
@@ -3829,12 +3873,12 @@ class UIManager {
   static PROPERTY_GROUPS = {
     pen:     ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'pressureGroup', 'opacityGroup', 'layersGroup'],
     line:    ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
-    arrow:   ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'arrowTypeGroup', 'opacityGroup', 'layersGroup'],
-    rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'opacityGroup', 'layersGroup'],
-    ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'fontFamilyGroup', 'fontSizeGroup', 'opacityGroup', 'layersGroup'],
-    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'opacityGroup', 'layersGroup'],
+    arrow:   ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'arrowTypeGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
+    rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
+    ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
+    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     text:    ['colorGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
-    image:   ['opacityGroup', 'layersGroup'],
+    image:   ['backgroundGroup', 'fillGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     eraser:  [],
     select:  [],
     hand:    []
@@ -3885,7 +3929,8 @@ class UIManager {
     mark('#edgesGroup .prop-btn', (b) => b.dataset.edges === (obj.edges || 'sharp'));
     mark('#fontFamilyGroup .prop-btn', (b) => b.dataset.font === (obj.fontFamily || 'hand'));
     mark('#fontSizeGroup .prop-btn', (b) => parseInt(b.dataset.size, 10) === (obj.fontSize || 20));
-    mark('#textAlignGroup .prop-btn', (b) => b.dataset.align === (obj.align || 'left'));
+    mark('#textAlignGroup .prop-btn', (b) =>
+      b.dataset.align === (obj.labelAlign || obj.align || 'center'));
     mark('#pressureGroup .prop-btn', (b) => b.dataset.pressure === (obj.pressure || 'variable'));
 
     const percent = Math.round((obj.opacity ?? 1) * 100);
@@ -4540,10 +4585,27 @@ if (!window.__WB_EVENTS_BOUND__) {
         libraryId: place.libraryId,
         iconId: place.iconId,
         src: place.libraryId === BUILTIN_ID ? place.source : undefined,
+        // An image is a first-class object: it can sit on a coloured panel,
+        // carry a caption and be connected by arrows, like any other shape.
+        backgroundColor: 'transparent',
+        fillStyle: state.fillStyle || 'solid',
+        edges: state.edges || 'round',
+        opacity: state.strokeOpacity ?? 1,
+        labelFont: state.fontFamily || 'hand',
+        labelSize: state.fontSize || 20,
+        labelAlign: 'center',
+        labelColor: state.strokeColor || '#1e1e1e',
         createdBy: state.localPeerId,
         rev: 0
       };
       DocumentManager.addObject(iconObj, true);
+
+      // Select what was just dropped and switch to the pointer, so its
+      // properties are on screen and it can be moved straight away. Landing
+      // an image and being shown the pen's settings is confusing.
+      DrawingTools.selectTool('select');
+      state.selectedId = iconObj.id;
+      UIManager.updateProperties({ open: true });
       state.requestRender();
     };
     img.onerror = () => console.warn('Could not load icon:', place.iconId);

@@ -147,6 +147,13 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 - Sensible defaults: a soft green box with a thin black outline and rounded corners
 - Stroke widths are thin (1), medium (2) and bold (4). The second, hand-drawn pass is thinner and much fainter than the first — stroking the same outline twice at full weight does not read as hand-drawn, it reads as a thick line with ragged edges
 
+**Images are first-class objects**
+- An image can sit on a coloured background panel, carry a caption, be connected by arrows, and be selected, moved and resized like any shape
+- It keeps opacity and layers, and gains background, fill, edges, font and alignment
+- Stroke colour is deliberately absent — the artwork's own colours are not ours to change
+- Its text is a caption below the image rather than across the middle of it
+- Dropping an image selects it, so its properties are on screen straight away
+
 **Text inside shapes**
 - Double-click a box, circle, diamond or arrow — or click it with the text tool — and type inside it
 - The text is centred, wrapped to the shape's width, and re-wraps when the shape is resized
