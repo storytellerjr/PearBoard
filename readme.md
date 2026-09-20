@@ -130,6 +130,10 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 **Drag and drop**
 - Icons are dragged onto the board and land where they are dropped, tracked with pointer events so it works with a mouse, a trackpad or a touchscreen
 
+**Select and move things**
+- A pointer tool: hover to highlight, click to select, drag to move, Delete to remove — on strokes, shapes, text and icons alike
+- Object dragging already existed but was hidden behind holding Shift, with no outline drawn and no way to discover it. Shift-drag still works with any tool
+
 **Your own icon libraries**
 - Icons can be imported from a local folder into named libraries with a description, and switched between in the panel
 - Imported art is scaled to 512px on its longest side on the way in

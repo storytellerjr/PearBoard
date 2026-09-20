@@ -27,7 +27,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 12:33:14'
+export const BUILD_STAMP = 'build 12:40:09'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -635,6 +635,17 @@ class ObjectRenderer {
         this.renderObject(obj);
       }
     }
+
+    // Selection and hover outlines sit above everything else.
+    if (state.tool === 'select') {
+      const hovered = state.hoverId && state.hoverId !== state.selectedId
+        ? state.doc.objects[state.hoverId]
+        : null;
+      if (hovered) this.renderBounds(hovered, 'rgba(37, 99, 235, .35)');
+
+      const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
+      if (selected) this.renderBounds(selected, 'rgba(37, 99, 235, .9)');
+    }
   }
 
   static renderObject(obj) {
@@ -918,6 +929,13 @@ class GeometryUtils {
 class DrawingTools {
   static selectTool(toolName) {
     state.tool = toolName;
+
+    if (toolName !== 'select') {
+      state.selectedId = null;
+      state.hoverId = null;
+    }
+    ui.canvas.style.cursor = 'default';
+    state.requestRender();
 
     // Update UI
     [...ui.tools.querySelectorAll('.btn')].forEach(button => {
@@ -1472,6 +1490,7 @@ class InputHandler {
       // Tool shortcuts
       else if (!e.ctrlKey && !e.metaKey) {
         switch (key) {
+          case 'v': DrawingTools.selectTool('select'); break;
           case 'p': DrawingTools.selectTool('pen'); break;
           case 'e': DrawingTools.selectTool('eraser'); break;
           case 'l': DrawingTools.selectTool('line'); break;
@@ -1479,6 +1498,15 @@ class InputHandler {
           case 'o': DrawingTools.selectTool('ellipse'); break;
           case 'd': DrawingTools.selectTool('diamond'); break;
           case 't': DrawingTools.selectTool('text'); break;
+        }
+
+        // Remove the selected object.
+        if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedId) {
+          e.preventDefault();
+          DocumentManager.deleteObject(state.selectedId, true);
+          state.selectedId = null;
+          state.hoverId = null;
+          state.requestRender();
         }
       }
 
@@ -1525,11 +1553,21 @@ class InputHandler {
       return;
     }
 
-    // Check for object dragging
-    if (event.shiftKey) {
+    // The select tool picks an object up directly. Shift does the same with
+    // any tool, which is how this worked before there was a select tool.
+    if (state.tool === 'select' || event.shiftKey) {
       const objectId = DocumentManager.findTopObjectAt(coords.x, coords.y);
       if (objectId) {
+        state.selectedId = objectId;
         this.startDragging(objectId, coords);
+        state.requestRender();
+        return;
+      }
+
+      if (state.tool === 'select') {
+        // Clicking empty space clears the selection.
+        state.selectedId = null;
+        state.requestRender();
         return;
       }
     }
@@ -1540,6 +1578,16 @@ class InputHandler {
 
   static handleMouseMove(event) {
     const coords = CoordinateUtils.toCanvas(event);
+
+    // Highlight what the select tool would pick up.
+    if (state.tool === 'select' && !state.isDragging && !state.drawing) {
+      const hovered = DocumentManager.findTopObjectAt(coords.x, coords.y);
+      if (hovered !== state.hoverId) {
+        state.hoverId = hovered;
+        state.requestRender();
+      }
+      ui.canvas.style.cursor = hovered ? 'move' : 'default';
+    }
 
     if (state.drawing && state.activeId) {
       this.continuDrawing(coords);

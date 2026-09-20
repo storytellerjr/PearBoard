@@ -74,6 +74,7 @@ export const state = {
   // ---- selection and dragging --------------------------------------------
   activeId: null,
   hoverId: null,
+  selectedId: null,
   isDragging: false,
   dragStart: null,
   dragInitialPos: null,
