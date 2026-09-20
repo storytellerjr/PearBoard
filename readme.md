@@ -87,11 +87,21 @@ Every sat goes straight into development time — new features, bug fixes, and k
 
 ## 🧭 Project status and history
 
-PearBoard was created by **Rohan Chaudhary** ([@Codesamp-Rohan](https://github.com/Codesamp-Rohan)) in September 2025. His last commit was on 7 November 2025, on the `UI/improvingUI` branch, which was never merged.
+PearBoard was created by **Rohan Chaudhary** ([@Codesamp-Rohan](https://github.com/Codesamp-Rohan)) in September 2025. 🍐 In about seven weeks he built the whole thing — the canvas, the peer-to-peer syncing, the live cursors, the undo/redo, the toolbar — and shared it openly with everyone.
 
-Since **September 2026** the project is maintained by [@storytellerjr](https://github.com/storytellerjr). This repository carries the complete original history — all 43 of Rohan's commits, with his authorship intact — plus every branch and pull-request head from the original repository, including one whose branch had been deleted upstream.
+Rohan stepped away from the project around **November 2025**. His last commit was on 7 November 2025, on the `UI/improvingUI` branch, which was never merged.
 
-Development continues from `UI/improvingUI`, where the original author left off. 🚧
+### 🙏 Thank you, Rohan
+
+This project exists because Rohan built it and chose to release it openly. Every good idea in here started with him, and his name stays on all 43 of his commits — where it belongs. Wherever you are now: thank you, and we hope you like where it goes next. 🧡
+
+### 🚀 Where it goes from here
+
+Since **September 2026** the project is maintained by [@storytellerjr](https://github.com/storytellerjr), picking it up exactly where Rohan left it.
+
+This repository carries the complete original history — all 43 of Rohan's commits, with his authorship intact — plus every branch and pull-request head from the original repository, including one whose branch had been deleted upstream. Nothing of his work was lost in the handover.
+
+Development continues from `UI/improvingUI`, the branch he was working on when he stopped. 🚧
 
 ### Changes from the original
 
