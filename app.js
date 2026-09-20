@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 13:56:51'
+export const BUILD_STAMP = 'build 14:14:52'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -1555,7 +1555,7 @@ class DrawingTools {
       state.selectedId = null;
       state.hoverId = null;
     }
-    ui.canvas.style.cursor = 'default';
+    InputHandler.updateCursor(null);
     UIManager.updateProperties({ open: true });
     state.requestRender();
 
@@ -2240,6 +2240,14 @@ class InputHandler {
   }
 
   static setupMouseHandlers() {
+    ui.canvas.addEventListener('mouseleave', () => {
+      if (state.hoverId !== null) {
+        state.hoverId = null;
+        state.requestRender();
+      }
+      ui.canvas.style.cursor = 'default';
+    });
+
     ui.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
     ui.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     ui.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
@@ -2342,6 +2350,45 @@ class InputHandler {
     state.requestRender();
   }
 
+  /**
+   * The pointer tells you what will happen if you press.
+   *
+   * Drawing tools show a crosshair, the select tool shows the four-way move
+   * cross when something is under the pointer, and a plain arrow over empty
+   * board. Set in one place so the tools cannot disagree.
+   */
+  static updateCursor(hoveredId, isShiftPressed = false) {
+    let cursor = 'default';
+
+    switch (state.tool) {
+      case 'select':
+        cursor = hoveredId ? 'move' : 'default';
+        break;
+      case 'hand':
+        cursor = state.isPanning ? 'grabbing' : 'grab';
+        break;
+      case 'eraser':
+        cursor = 'cell';
+        break;
+      case 'text':
+        cursor = 'text';
+        break;
+      case 'pen':
+      case 'line':
+      case 'arrow':
+      case 'rect':
+      case 'ellipse':
+      case 'diamond':
+        cursor = 'crosshair';
+        break;
+    }
+
+    // Shift picks an object up with any tool, so show that it would.
+    if (isShiftPressed && hoveredId) cursor = 'move';
+    if (state.isSpacePressed || state.spaceHeld) cursor = 'grab';
+    if (ui.canvas.style.cursor !== cursor) ui.canvas.style.cursor = cursor;
+  }
+
   static handleMouseMove(event) {
     const coords = CoordinateUtils.toCanvas(event);
 
@@ -2371,16 +2418,6 @@ class InputHandler {
     if (state.pendingArrowId) {
       DrawingTools.resizeShape(state.pendingArrowId, coords.x, coords.y);
       return;
-    }
-
-    // Highlight what the select tool would pick up.
-    if (state.tool === 'select' && !state.isDragging && !state.drawing) {
-      const hovered = DocumentManager.findTopObjectAt(coords.x, coords.y);
-      if (hovered !== state.hoverId) {
-        state.hoverId = hovered;
-        state.requestRender();
-      }
-      ui.canvas.style.cursor = hovered ? 'move' : 'default';
     }
 
     if (state.drawing && state.activeId) {
@@ -2543,9 +2580,16 @@ class InputHandler {
 
   static updateHover(coords, isShiftPressed) {
     const objectId = DocumentManager.findTopObjectAt(coords.x, coords.y);
-    state.hoverId = objectId;
-    ui.canvas.style.cursor = (objectId && isShiftPressed) ? 'move' : 'crosshair';
-    state.requestRender();
+
+    if (state.hoverId !== objectId) {
+      state.hoverId = objectId;
+      state.requestRender();
+    }
+
+    // The cursor belongs to updateCursor(). This used to set it directly,
+    // forcing a crosshair unless Shift was held, which silently undid
+    // whatever the tool had asked for a few lines earlier.
+    this.updateCursor(objectId, isShiftPressed);
   }
 
   static handlePanMove(event) {
