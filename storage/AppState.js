@@ -85,6 +85,8 @@ export const state = {
   tempShape: null,
   eraserPath: null,
   textEl: null,
+  labelEl: null,          // textarea while editing a shape's label
+  editingLabelId: null,
 
   // ---- selection and dragging --------------------------------------------
   activeId: null,

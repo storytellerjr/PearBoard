@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 14:49:13'
+export const BUILD_STAMP = 'build 15:12:16'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -656,13 +656,15 @@ class ObjectRenderer {
     }
 
     // Selection and hover outlines sit above everything else.
-    if (state.tool === 'select') {
+    if (state.tool === 'select' || state.tool === 'text') {
       const hovered = state.hoverId && state.hoverId !== state.selectedId
         ? state.doc.objects[state.hoverId]
         : null;
-      if (hovered) this.renderBounds(hovered, 'rgba(37, 99, 235, .35)');
+      if (hovered) this.renderBounds(hovered, 'rgba(37, 99, 235, .45)');
 
-      const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
+      const selected = state.tool === 'select' && state.selectedId
+        ? state.doc.objects[state.selectedId]
+        : null;
       if (selected) this.renderSelection(selected);
     }
 
@@ -699,12 +701,15 @@ class ObjectRenderer {
         break;
       case 'rect':
         this.renderRect(obj);
+        this.renderLabel(obj);
         break;
       case 'ellipse':
         this.renderEllipse(obj);
+        this.renderLabel(obj);
         break;
       case 'diamond':
         this.renderDiamond(obj);
+        this.renderLabel(obj);
         break;
       case 'text':
         this.renderText(obj);
@@ -714,6 +719,7 @@ class ObjectRenderer {
         break;
       case 'arrow':
         this.renderArrow(obj);
+        this.renderLabel(obj);
         break;
     }
 
@@ -1020,6 +1026,84 @@ class ObjectRenderer {
     ]);
   }
 
+  /**
+   * A shape's label: text living inside the shape, wrapped to its width and
+   * centred. Stored on the shape itself, so it moves and resizes with it and
+   * needs no separate object to keep in step.
+   */
+  static renderLabel(obj) {
+    if (state.editingLabelId === obj.id) return;
+
+    const text = (obj.label || '').trim();
+    if (!text) return;
+
+    const ctx = state.ctx;
+    const b = GeometryUtils.getBounds(obj);
+    const size = obj.labelSize || 20;
+    const family = FONT_STACKS[obj.labelFont || 'hand'] || FONT_STACKS.hand;
+
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
+    ctx.font = `${size}px ${family}`;
+    ctx.fillStyle = obj.labelColor || '#1e1e1e';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Diamonds taper, so their usable width is about half the box.
+    const inset = obj.type === 'diamond' ? 0.5 : 0.85;
+    const maxWidth = Math.max(20, b.w * inset);
+
+    // An arrow has no body to sit in, so clear the line behind the words.
+    const onArrow = obj.type === 'arrow';
+
+    const lines = this.wrapText(text, maxWidth);
+    const lineHeight = size * 1.25;
+    const startY = b.y + b.h / 2 - ((lines.length - 1) * lineHeight) / 2;
+    const centreX = b.x + b.w / 2;
+
+    lines.forEach((line, i) => {
+      const y = startY + i * lineHeight;
+
+      if (onArrow) {
+        const w = ctx.measureText(line).width;
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(centreX - w / 2 - 4, y - lineHeight / 2, w + 8, lineHeight);
+        ctx.restore();
+      }
+
+      ctx.fillText(line, centreX, y);
+    });
+
+    ctx.restore();
+  }
+
+  /** Break text into lines that fit, honouring newlines the user typed. */
+  static wrapText(text, maxWidth) {
+    const ctx = state.ctx;
+    const lines = [];
+
+    for (const paragraph of String(text).split('\n')) {
+      const words = paragraph.split(/\s+/).filter(Boolean);
+      if (words.length === 0) { lines.push(''); continue; }
+
+      let line = words[0];
+      for (let i = 1; i < words.length; i++) {
+        const candidate = `${line} ${words[i]}`;
+        if (ctx.measureText(candidate).width <= maxWidth) {
+          line = candidate;
+        } else {
+          lines.push(line);
+          line = words[i];
+        }
+      }
+      lines.push(line);
+    }
+
+    return lines;
+  }
+
   static renderText(obj) {
     const ctx = state.ctx;
     ctx.setLineDash([]);
@@ -1322,7 +1406,7 @@ class ObjectRenderer {
    * of each side. Returned in world coordinates.
    */
   static handlePoints(obj) {
-    const b = GeometryUtils.getBounds(obj);
+    const b = this.frameBounds(obj);
     const midX = b.x + b.w / 2;
     const midY = b.y + b.h / 2;
 
@@ -1365,7 +1449,7 @@ class ObjectRenderer {
   /** The selected object's frame, with a square at each corner. */
   static renderSelection(obj) {
     const ctx = state.ctx;
-    const b = GeometryUtils.getBounds(obj);
+    const b = this.frameBounds(obj);
     const pad = 4 / state.zoom;
 
     ctx.save();
@@ -1394,13 +1478,38 @@ class ObjectRenderer {
     ctx.restore();
   }
 
+  /**
+   * A shape's frame for hover and selection.
+   *
+   * An arrow running straight across has a box a pixel or two tall, which
+   * reads as a line rather than a frame, so thin objects are given a minimum
+   * extent about their own centre.
+   */
+  static frameBounds(obj) {
+    const b = GeometryUtils.getBounds(obj);
+    const MIN = 28;
+
+    let { x, y, w, h } = b;
+
+    if (h < MIN) {
+      y = b.y + b.h / 2 - MIN / 2;
+      h = MIN;
+    }
+    if (w < MIN) {
+      x = b.x + b.w / 2 - MIN / 2;
+      w = MIN;
+    }
+
+    return { x, y, w, h };
+  }
+
   static renderBounds(obj, color = 'rgba(0,0,0,.2)') {
     state.ctx.save();
     state.ctx.setLineDash([6, 6]);
     state.ctx.lineWidth = 1;
     state.ctx.strokeStyle = color;
 
-    const bounds = GeometryUtils.getBounds(obj);
+    const bounds = this.frameBounds(obj);
     state.ctx.strokeRect(bounds.x, bounds.y, bounds.w, bounds.h);
 
     state.ctx.restore();
@@ -1620,8 +1729,15 @@ class GeometryUtils {
 
   static pointInBounds(obj, x, y) {
     const bounds = this.getBounds(obj);
-    return x >= bounds.x && y >= bounds.y &&
-        x <= bounds.x + bounds.w && y <= bounds.y + bounds.h;
+
+    // An arrow's box can be only a pixel or two tall when it runs straight
+    // across, which makes it almost impossible to click. Give thin objects
+    // some slack.
+    const padX = bounds.w < 16 ? 10 : 0;
+    const padY = bounds.h < 16 ? 10 : 0;
+
+    return x >= bounds.x - padX && y >= bounds.y - padY &&
+        x <= bounds.x + bounds.w + padX && y <= bounds.y + bounds.h + padY;
   }
 }
 
@@ -1899,6 +2015,121 @@ class DrawingTools {
 // TEXT EDITOR
 // ============================================================================
 
+/**
+ * Editing the label inside a shape.
+ *
+ * A textarea is laid over the shape while typing, using the same font and
+ * size as the canvas, so what is typed looks like what will be drawn.
+ */
+class LabelEditor {
+  static open(obj) {
+    this.close();
+
+    const b = GeometryUtils.getBounds(obj);
+    const rect = ui.canvas.getBoundingClientRect();
+    const size = obj.labelSize || 20;
+    const lineHeight = size * state.zoom * 1.25;
+
+    // Place the editor centred on the shape rather than at its top-left. An
+    // arrow's box is a pixel or two tall when it runs straight across, so
+    // anchoring to the top put the words above the line instead of on it.
+    const centre = CoordinateUtils.worldToScreen(b.x + b.w / 2, b.y + b.h / 2);
+    const boxWidth = Math.max(b.w * state.zoom, 120);
+    const boxHeight = Math.max(b.h * state.zoom, lineHeight * 1.6);
+
+    const area = document.createElement('textarea');
+    area.className = 'label-editor';
+    area.dataset.id = obj.id;
+    area.value = obj.label || '';
+    area.spellcheck = false;
+
+    Object.assign(area.style, {
+      position: 'absolute',
+      left: `${rect.left + centre.x - boxWidth / 2}px`,
+      top: `${rect.top + centre.y - boxHeight / 2}px`,
+      width: `${boxWidth}px`,
+      height: `${boxHeight}px`,
+      fontFamily: FONT_STACKS[obj.labelFont || 'hand'] || FONT_STACKS.hand,
+      fontSize: `${size * state.zoom}px`,
+      lineHeight: '1.25',
+      color: obj.labelColor || '#1e1e1e',
+      textAlign: 'center',
+      background: 'transparent',
+      border: 'none',
+      outline: 'none',
+      resize: 'none',
+      overflow: 'hidden',
+      padding: '0 8px',
+      caretColor: obj.labelColor || '#1e1e1e',
+      zIndex: '9999'
+    });
+
+    // A textarea cannot centre its content vertically, so the top padding is
+    // computed from how many lines there are and kept in step as you type.
+    const centreVertically = () => {
+      const lines = Math.max(1, area.value.split('\n').length);
+      const pad = Math.max(0, (boxHeight - lines * lineHeight) / 2);
+      area.style.paddingTop = `${pad}px`;
+    };
+
+    centreVertically();
+    area.addEventListener('input', centreVertically);
+
+    area.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.commit();
+      }
+    });
+
+    area.addEventListener('blur', () => this.commit());
+
+    document.body.appendChild(area);
+    state.labelEl = area;
+
+    // Hide the drawn label while editing, so it is not doubled.
+    state.editingLabelId = obj.id;
+    state.requestRender();
+
+    setTimeout(() => {
+      area.focus();
+      area.select();
+    }, 0);
+  }
+
+  static commit() {
+    const area = state.labelEl;
+    if (!area) return;
+
+    state.labelEl = null;
+    const id = area.dataset.id;
+    const text = area.value;
+    area.remove();
+
+    state.editingLabelId = null;
+
+    const obj = state.doc.objects[id];
+    if (obj) {
+      DocumentManager.updateObject(id, {
+        label: text,
+        labelFont: obj.labelFont || state.fontFamily || 'hand',
+        labelSize: obj.labelSize || state.fontSize || 20,
+        labelColor: obj.labelColor || state.strokeColor
+      }, true);
+    }
+
+    state.requestRender();
+  }
+
+  static close() {
+    if (!state.labelEl) return;
+    state.labelEl.remove();
+    state.labelEl = null;
+    state.editingLabelId = null;
+  }
+}
+
 class TextEditor {
   static open(worldX, worldY, initialText = '') {
     this.close(true);
@@ -1966,13 +2197,16 @@ class TextEditor {
       fontSize: `${fontPixels}px`,
       textAlign: textObj.align || 'left',
       color: textObj.color,
-      border: '2px solid #007bff',
-      background: 'rgba(255, 255, 255, 0.95)',
-      borderRadius: '4px',
-      padding: '4px 6px',
+      // No chrome: typing should look like writing straight onto the board.
+      border: 'none',
+      background: 'transparent',
+      padding: '0',
       margin: '0',
       outline: 'none',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      boxShadow: 'none',
+      caretColor: textObj.color,
+      lineHeight: '1.25',
+      resize: 'none',
       zIndex: '9999',
       whiteSpace: 'pre-wrap',
       overflow: 'visible',
@@ -2325,6 +2559,19 @@ class InputHandler {
   }
 
   static setupMouseHandlers() {
+    ui.canvas.addEventListener('dblclick', (e) => {
+      const coords = CoordinateUtils.toCanvas(e);
+      const id = DocumentManager.findTopObjectAt(coords.x, coords.y);
+      if (!id) return;
+
+      const obj = state.doc.objects[id];
+      if (!obj || !['rect', 'ellipse', 'diamond', 'arrow'].includes(obj.type)) return;
+
+      e.preventDefault();
+      state.selectedId = id;
+      LabelEditor.open(obj);
+    });
+
     ui.canvas.addEventListener('mouseleave', () => {
       if (state.hoverId !== null) {
         state.hoverId = null;
@@ -2629,9 +2876,21 @@ class InputHandler {
       case 'diamond':
         DrawingTools.beginShape(id, state.tool, coords.x, coords.y);
         break;
-      case 'text':
-        TextEditor.open(coords.x, coords.y);
+      case 'text': {
+        // Clicking a shape with the text tool writes inside it; clicking bare
+        // board starts free text where the pointer is.
+        const id = DocumentManager.findTopObjectAt(coords.x, coords.y);
+        const obj = id ? state.doc.objects[id] : null;
+
+        if (obj && ['rect', 'ellipse', 'diamond', 'arrow'].includes(obj.type)) {
+          state.drawing = false;
+          state.selectedId = id;
+          LabelEditor.open(obj);
+        } else {
+          TextEditor.open(coords.x, coords.y);
+        }
         break;
+      }
     }
   }
 
@@ -2733,6 +2992,18 @@ class InputHandler {
     if (state.hoverId !== objectId) {
       state.hoverId = objectId;
       state.requestRender();
+    }
+
+    // With the text tool, show which object would receive the text.
+    if (state.tool === 'text') {
+      const obj = objectId ? state.doc.objects[objectId] : null;
+      const labelable = obj && ['rect', 'ellipse', 'diamond', 'arrow'].includes(obj.type);
+      ui.canvas.style.cursor = 'text';
+      if (!labelable && state.hoverId) {
+        state.hoverId = null;
+        state.requestRender();
+      }
+      return;
     }
 
     // A handle on the selection wins: show which way it will resize.
@@ -3486,7 +3757,8 @@ class UIManager {
           setActive(fontRow, (b) => b.dataset.font === btn.dataset.font);
           applyToSelection({
             fontFamily: btn.dataset.font,
-            font: FONT_STACKS[btn.dataset.font]
+            font: FONT_STACKS[btn.dataset.font],
+            labelFont: btn.dataset.font
           });
         });
       });
@@ -3501,7 +3773,7 @@ class UIManager {
           const size = parseInt(btn.dataset.size, 10);
           state.fontSize = size;
           setActive(fontSizeRow, (b) => b.dataset.size === btn.dataset.size);
-          applyToSelection({ fontSize: size });
+          applyToSelection({ fontSize: size, labelSize: size });
         });
       });
       setActive(fontSizeRow, (b) => parseInt(b.dataset.size, 10) === state.fontSize);
@@ -3558,9 +3830,9 @@ class UIManager {
     pen:     ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'pressureGroup', 'opacityGroup', 'layersGroup'],
     line:    ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
     arrow:   ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'arrowTypeGroup', 'opacityGroup', 'layersGroup'],
-    rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'opacityGroup', 'layersGroup'],
-    ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
-    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'opacityGroup', 'layersGroup'],
+    rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'opacityGroup', 'layersGroup'],
+    ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'fontFamilyGroup', 'fontSizeGroup', 'opacityGroup', 'layersGroup'],
+    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'opacityGroup', 'layersGroup'],
     text:    ['colorGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     image:   ['opacityGroup', 'layersGroup'],
     eraser:  [],

@@ -147,6 +147,12 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 - Sensible defaults: a soft green box with a thin black outline and rounded corners
 - Stroke widths are thin (1), medium (2) and bold (4). The second, hand-drawn pass is thinner and much fainter than the first — stroking the same outline twice at full weight does not read as hand-drawn, it reads as a thick line with ragged edges
 
+**Text inside shapes**
+- Double-click a box, circle, diamond or arrow — or click it with the text tool — and type inside it
+- The text is centred, wrapped to the shape's width, and re-wraps when the shape is resized
+- It lives on the shape itself, so it moves with it and cannot drift out of step
+- Arrows get a white strip behind their label, so the line does not strike through its own words
+
 **Text with a real hand-drawn font**
 - Architects Daughter is bundled (SIL Open Font License), so a board renders correctly with no network — this is a peer-to-peer app
 - Three families, four sizes, and alignment; the editor uses the same font as the canvas, so what you type is what you get

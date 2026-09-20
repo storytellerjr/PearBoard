@@ -1467,3 +1467,10 @@ input[type="range"]::-ms-fill-upper {
   font-weight: 600;
   font-family: inherit;
 }
+
+/* Editing a shape's label — laid over the shape, same font as the canvas */
+.label-editor {
+  font-family: inherit;
+  box-sizing: border-box;
+  caret-color: #1e1e1e;
+}

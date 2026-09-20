@@ -122,6 +122,21 @@ Text also gets **font family** (hand-drawn, normal, code), **size** and
 
 ---
 
+## ✍️ Writing inside a shape
+
+**Double-click a box, circle, diamond or arrow** and type. Or pick the **text
+tool** and click one — hovering outlines whichever object would receive the text,
+so you can see what you are about to write into.
+
+The words sit **centred inside the shape**, wrapped to its width. Resize the
+shape and the text re-wraps; move it and the text goes along. Click away or press
+**Escape** to finish, and double-click to edit it again.
+
+Clicking bare board with the text tool writes free text there instead.
+
+With a shape selected, **font family** and **size** in the panel change its
+label.
+
 ## 🖼️ Icon libraries
 
 The **gallery** button opens the icons. **Drag one onto the board** and it lands
