@@ -27,7 +27,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 12:40:09'
+export const BUILD_STAMP = 'build 13:06:47'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -646,6 +646,8 @@ class ObjectRenderer {
       const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
       if (selected) this.renderBounds(selected, 'rgba(37, 99, 235, .9)');
     }
+
+    this.renderSnapAnchors();
   }
 
   static renderObject(obj) {
@@ -665,6 +667,8 @@ class ObjectRenderer {
       state.ctx.strokeStyle = addAlphaToColor(obj.color, alpha);
       state.ctx.fillStyle = addAlphaToColor(obj.color, alpha);
     }
+
+    this.applyStrokeStyle(obj.strokeStyle, obj.size);
 
     switch (obj.type) {
       case 'pen':
@@ -689,8 +693,12 @@ class ObjectRenderer {
       case 'image':
         this.renderImage(obj);
         break;
+      case 'arrow':
+        this.renderArrow(obj);
+        break;
     }
 
+    state.ctx.setLineDash([]);
     state.ctx.restore();
   }
 
@@ -823,6 +831,153 @@ class ObjectRenderer {
     state.ctx.fillText(obj.text || '', obj.x, obj.y);
   }
 
+  /** Dash pattern for a stroke style, scaled so it reads at any zoom. */
+  static applyStrokeStyle(style, size) {
+    const ctx = state.ctx;
+    const unit = Math.max(1, size || 2);
+
+    switch (style) {
+      case 'dashed':
+        ctx.setLineDash([unit * 3, unit * 2]);
+        ctx.lineCap = 'butt';
+        break;
+      case 'dotted':
+        ctx.setLineDash([0.1, unit * 2]);
+        ctx.lineCap = 'round';
+        break;
+      default:
+        ctx.setLineDash([]);
+        ctx.lineCap = 'round';
+    }
+  }
+
+  /**
+   * A small, repeatable offset for the hand-drawn look.
+   *
+   * Seeded from the object id and the point index, so a shape wobbles the same
+   * way on every frame and on every peer's screen. Random jitter would shimmer
+   * as the canvas redraws and would differ between peers.
+   */
+  static wobble(seed, index, amount) {
+    if (!amount) return { x: 0, y: 0 };
+    let h = 2166136261;
+    const key = `${seed}:${index}`;
+    for (let i = 0; i < key.length; i++) {
+      h ^= key.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const a = ((h >>> 0) % 1000) / 1000 - 0.5;
+    const b = ((Math.imul(h, 48271) >>> 0) % 1000) / 1000 - 0.5;
+    return { x: a * amount * 2, y: b * amount * 2 };
+  }
+
+  static sloppyAmount(obj) {
+    const level = obj.sloppiness ?? 0;
+    return level === 0 ? 0 : level === 1 ? 2.5 : 5;
+  }
+
+  static renderArrow(obj) {
+    const ctx = state.ctx;
+    const { start, end } = GeometryUtils.getArrowPoints(obj);
+    const amount = this.sloppyAmount(obj);
+    const type = obj.arrowType || 'straight';
+
+    this.applyStrokeStyle(obj.strokeStyle, obj.size);
+
+    const w1 = this.wobble(obj.id, 0, amount);
+    const w2 = this.wobble(obj.id, 1, amount);
+    const from = { x: start.x + w1.x, y: start.y + w1.y };
+    const to = { x: end.x + w2.x, y: end.y + w2.y };
+
+    // The tangent at the end decides which way the head points.
+    let tangent;
+
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+
+    if (type === 'curved') {
+      const mx = (from.x + to.x) / 2;
+      const my = (from.y + to.y) / 2;
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      // Bow perpendicular to the line, by a fraction of its length.
+      const bow = Math.min(len * 0.22, 90);
+      const cx = mx - (dy / len) * bow;
+      const cy = my + (dx / len) * bow;
+
+      ctx.quadraticCurveTo(cx, cy, to.x, to.y);
+      tangent = { x: to.x - cx, y: to.y - cy };
+    } else if (type === 'elbow') {
+      // Two axis-aligned segments meeting at a right angle, turning along
+      // whichever axis has the greater distance first.
+      const horizontalFirst = Math.abs(to.x - from.x) >= Math.abs(to.y - from.y);
+      const corner = horizontalFirst
+        ? { x: to.x, y: from.y }
+        : { x: from.x, y: to.y };
+
+      ctx.lineTo(corner.x, corner.y);
+      ctx.lineTo(to.x, to.y);
+      tangent = { x: to.x - corner.x, y: to.y - corner.y };
+    } else {
+      ctx.lineTo(to.x, to.y);
+      tangent = { x: to.x - from.x, y: to.y - from.y };
+    }
+
+    ctx.stroke();
+
+    this.renderArrowHead(to, tangent, obj);
+    ctx.setLineDash([]);
+  }
+
+  static renderArrowHead(tip, tangent, obj) {
+    const ctx = state.ctx;
+    const angle = Math.atan2(tangent.y, tangent.x);
+    const size = Math.max(10, (obj.size || 2) * 3.5);
+    const spread = Math.PI / 7;
+
+    // The head is solid, never dashed.
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(
+      tip.x - size * Math.cos(angle - spread),
+      tip.y - size * Math.sin(angle - spread)
+    );
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(
+      tip.x - size * Math.cos(angle + spread),
+      tip.y - size * Math.sin(angle + spread)
+    );
+    ctx.stroke();
+  }
+
+  /** The anchors an arrow could snap to, shown while one is being drawn. */
+  static renderSnapAnchors() {
+    if (!state.snapAnchors) return;
+    const ctx = state.ctx;
+
+    ctx.save();
+    ctx.setLineDash([]);
+    for (const point of state.snapAnchors.points) {
+      const active = state.snapAnchors.active &&
+        state.snapAnchors.active.x === point.x &&
+        state.snapAnchors.active.y === point.y;
+
+      const r = (active ? 6 : 4.5) / state.zoom;
+
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = active ? 'rgba(37, 99, 235, .95)' : 'rgba(255, 255, 255, .95)';
+      ctx.fill();
+
+      ctx.lineWidth = 1.5 / state.zoom;
+      ctx.strokeStyle = active ? 'rgba(37, 99, 235, 1)' : 'rgba(37, 99, 235, .65)';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   static renderBounds(obj, color = 'rgba(0,0,0,.2)') {
     state.ctx.save();
     state.ctx.setLineDash([6, 6]);
@@ -856,6 +1011,15 @@ class GeometryUtils {
         return this.getPathBounds(obj);
       case 'line':
         return this.getLineBounds(obj);
+      case 'arrow': {
+        const { start, end } = this.getArrowPoints(obj);
+        return {
+          x: Math.min(start.x, end.x),
+          y: Math.min(start.y, end.y),
+          w: Math.abs(end.x - start.x),
+          h: Math.abs(end.y - start.y)
+        };
+      }
       case 'rect':
       case 'ellipse':
       case 'diamond':
@@ -895,6 +1059,129 @@ class GeometryUtils {
     };
   }
 
+  /**
+   * The four points an arrow can bind to: the midpoint of each side.
+   * Taken from the object's bounds, so it works for boxes, diamonds,
+   * ellipses and images alike.
+   */
+  static getAnchorPoints(obj) {
+    const b = this.getBounds(obj);
+    return {
+      top:    { x: b.x + b.w / 2, y: b.y },
+      right:  { x: b.x + b.w,     y: b.y + b.h / 2 },
+      bottom: { x: b.x + b.w / 2, y: b.y + b.h },
+      left:   { x: b.x,           y: b.y + b.h / 2 }
+    };
+  }
+
+  /** Object types an arrow may bind to. */
+  static isBindable(obj) {
+    return obj && ['rect', 'ellipse', 'diamond', 'image'].includes(obj.type);
+  }
+
+  /**
+   * The topmost bindable object at this point, allowing some slack around it
+   * so an arrow binds when you are near a shape, not only exactly on it.
+   */
+  static findBindableAt(x, y, slack = 0, excludeId = null) {
+    for (let i = state.doc.order.length - 1; i >= 0; i--) {
+      const id = state.doc.order[i];
+      if (id === excludeId) continue;
+
+      const obj = state.doc.objects[id];
+      if (!this.isBindable(obj)) continue;
+
+      const b = this.getBounds(obj);
+      if (x >= b.x - slack && x <= b.x + b.w + slack &&
+          y >= b.y - slack && y <= b.y + b.h + slack) {
+        return obj;
+      }
+    }
+    return null;
+  }
+
+  /** Of an object's four anchors, the one nearest a point. */
+  static nearestAnchorOf(obj, x, y) {
+    const anchors = this.getAnchorPoints(obj);
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const [name, point] of Object.entries(anchors)) {
+      const dist = Math.hypot(point.x - x, point.y - y);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { id: obj.id, anchor: name, point };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * What an arrow endpoint at this point should bind to.
+   *
+   * Being anywhere over a shape is enough — the nearest of its four anchors
+   * is chosen. Otherwise an anchor within `radius` still catches, so an arrow
+   * can bind by pointing just outside a shape's edge.
+   */
+  static findBindingAt(x, y, radius, excludeId = null) {
+    const over = this.findBindableAt(x, y, radius * 0.5, excludeId);
+    if (over) return this.nearestAnchorOf(over, x, y);
+    return this.findNearestAnchor(x, y, radius, excludeId);
+  }
+
+  /**
+   * Nearest anchor on any bindable object within `radius` world units.
+   * Returns { id, anchor, point } or null.
+   */
+  static findNearestAnchor(x, y, radius, excludeId = null) {
+    let best = null;
+    let bestDist = radius;
+
+    for (const id of state.doc.order) {
+      if (id === excludeId) continue;
+      const obj = state.doc.objects[id];
+      if (!this.isBindable(obj)) continue;
+
+      const anchors = this.getAnchorPoints(obj);
+      for (const [name, point] of Object.entries(anchors)) {
+        const dist = Math.hypot(point.x - x, point.y - y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { id, anchor: name, point };
+        }
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * An arrow's endpoints, following whatever it is bound to.
+   * A binding whose target has gone is simply ignored.
+   */
+  static getArrowPoints(obj) {
+    let start = { x: obj.x, y: obj.y };
+    let end = { x: obj.x + (obj.w || 0), y: obj.y + (obj.h || 0) };
+
+    if (obj.startBinding) {
+      const target = state.doc.objects[obj.startBinding.id];
+      if (target) {
+        const anchors = this.getAnchorPoints(target);
+        if (anchors[obj.startBinding.anchor]) start = anchors[obj.startBinding.anchor];
+      }
+    }
+
+    if (obj.endBinding) {
+      const target = state.doc.objects[obj.endBinding.id];
+      if (target) {
+        const anchors = this.getAnchorPoints(target);
+        if (anchors[obj.endBinding.anchor]) end = anchors[obj.endBinding.anchor];
+      }
+    }
+
+    return { start, end };
+  }
+
   static getRectBounds(obj) {
     return {
       x: Math.min(obj.x, obj.x + (obj.w || 0)),
@@ -930,11 +1217,15 @@ class DrawingTools {
   static selectTool(toolName) {
     state.tool = toolName;
 
+    if (state.pendingArrowId) InputHandler.cancelArrow();
+    state.snapAnchors = null;
+
     if (toolName !== 'select') {
       state.selectedId = null;
       state.hoverId = null;
     }
     ui.canvas.style.cursor = 'default';
+    UIManager.updatePropertiesForTool();
     state.requestRender();
 
     // Update UI
@@ -1011,6 +1302,12 @@ class DrawingTools {
         return this.pathIntersectsPoint(obj.points || [], point, radius);
       case 'line':
         return this.lineIntersectsPoint(obj, point, radius);
+      case 'arrow': {
+        const { start, end } = GeometryUtils.getArrowPoints(obj);
+        return this.lineSegmentIntersectsCircle(start, end, point, radius);
+      }
+      case 'image':
+        return this.shapeIntersectsPoint(obj, point, radius);
       case 'rect':
       case 'ellipse':
       case 'diamond':
@@ -1089,6 +1386,8 @@ class DrawingTools {
   static finishStroke(id) {
     if (!id) return;
 
+    state.snapAnchors = null;
+
     if (state.tool === 'eraser') {
       state.eraserPath = null;
       return;
@@ -1097,20 +1396,44 @@ class DrawingTools {
     NetworkManager.queueOperation({ t: 'touch', id });
   }
 
+  /** How close, in world units, an arrow endpoint must be to snap. */
+  static SNAP_RADIUS = 26;
+
   static beginShape(id, type, x, y) {
+    let startBinding = null;
+    let sx = x;
+    let sy = y;
+
+    if (type === 'arrow') {
+      const hit = GeometryUtils.findBindingAt(x, y, this.SNAP_RADIUS);
+      if (hit) {
+        startBinding = { id: hit.id, anchor: hit.anchor };
+        sx = hit.point.x;
+        sy = hit.point.y;
+      }
+    }
+
     const obj = {
       id,
       type,
-      x,
-      y,
+      x: sx,
+      y: sy,
       w: 0,
       h: 0,
       color: state.strokeColor,
       size: state.strokeSize,
       opacity: state.strokeOpacity ?? 1,
+      strokeStyle: state.strokeStyle || 'solid',
+      sloppiness: state.sloppiness ?? 0,
       createdBy: state.localPeerId,
       rev: 0
     };
+
+    if (type === 'arrow') {
+      obj.arrowType = state.arrowType || 'straight';
+      obj.startBinding = startBinding;
+      obj.endBinding = null;
+    }
 
     DocumentManager.addObject(obj, true);
     state.activeId = id;
@@ -1120,8 +1443,25 @@ class DrawingTools {
     const obj = state.doc.objects[id];
     if (!obj) return;
 
-    obj.w = x - obj.x;
-    obj.h = y - obj.y;
+    let tx = x;
+    let ty = y;
+
+    if (obj.type === 'arrow') {
+      // Offer the anchors of whatever is under the pointer, and snap to the
+      // nearest one. Binding by id, not position, so the arrow follows later.
+      const hit = GeometryUtils.findBindingAt(x, y, this.SNAP_RADIUS, id);
+      if (hit) {
+        obj.endBinding = { id: hit.id, anchor: hit.anchor };
+        tx = hit.point.x;
+        ty = hit.point.y;
+
+      } else {
+        obj.endBinding = null;
+      }
+    }
+
+    obj.w = tx - obj.x;
+    obj.h = ty - obj.y;
     obj.rev++;
     state.bumpDoc();
     state.requestRender();
@@ -1351,6 +1691,32 @@ class DocumentManager {
     }
   }
 
+  /**
+   * Move an object through the z-order. `order` is back-to-front, so the end
+   * of the array is what the user sees on top.
+   */
+  static reorderObject(id, where) {
+    const order = state.doc.order;
+    const from = order.indexOf(id);
+    if (from === -1) return;
+
+    order.splice(from, 1);
+
+    let to;
+    switch (where) {
+      case 'back':     to = 0; break;
+      case 'backward': to = Math.max(0, from - 1); break;
+      case 'forward':  to = Math.min(order.length, from + 1); break;
+      default:         to = order.length;
+    }
+
+    order.splice(to, 0, id);
+    state.bumpDoc();
+    state.requestRender();
+
+    NetworkManager.queueOperation({ t: 'reorder', id, where });
+  }
+
   static deleteObject(id, isLocal = false) {
     const obj = state.doc.objects[id];
     if (!obj) return;
@@ -1491,6 +1857,7 @@ class InputHandler {
       else if (!e.ctrlKey && !e.metaKey) {
         switch (key) {
           case 'v': DrawingTools.selectTool('select'); break;
+          case 'a': DrawingTools.selectTool('arrow'); break;
           case 'p': DrawingTools.selectTool('pen'); break;
           case 'e': DrawingTools.selectTool('eraser'); break;
           case 'l': DrawingTools.selectTool('line'); break;
@@ -1498,6 +1865,12 @@ class InputHandler {
           case 'o': DrawingTools.selectTool('ellipse'); break;
           case 'd': DrawingTools.selectTool('diamond'); break;
           case 't': DrawingTools.selectTool('text'); break;
+        }
+
+        // Abandon an arrow that is waiting for its second click.
+        if (e.key === 'Escape' && state.pendingArrowId) {
+          e.preventDefault();
+          InputHandler.cancelArrow();
         }
 
         // Remove the selected object.
@@ -1553,6 +1926,22 @@ class InputHandler {
       return;
     }
 
+    // Arrows are placed click, move, click — you point at where it starts,
+    // watch the line follow the pointer, then point at where the head goes.
+    // Dragging also works, for anyone who expects that instead.
+    if (state.tool === 'arrow') {
+      if (state.pendingArrowId) {
+        this.finishArrow(coords);
+      } else {
+        const id = state.generateRandomId();
+        DrawingTools.beginShape(id, 'arrow', coords.x, coords.y);
+        state.pendingArrowId = id;
+        state.pendingArrowStart = coords;
+        state.drawing = false;
+      }
+      return;
+    }
+
     // The select tool picks an object up directly. Shift does the same with
     // any tool, which is how this worked before there was a select tool.
     if (state.tool === 'select' || event.shiftKey) {
@@ -1576,8 +1965,70 @@ class InputHandler {
     this.startDrawing(coords);
   }
 
+  /** Settle the arrow at `coords`, or discard it if it has no length. */
+  static finishArrow(coords) {
+    const id = state.pendingArrowId;
+    if (!id) return;
+
+    DrawingTools.resizeShape(id, coords.x, coords.y);
+
+    const obj = state.doc.objects[id];
+    if (obj && Math.hypot(obj.w || 0, obj.h || 0) < 4 && !obj.endBinding) {
+      // A stray click with nowhere to point: drop it rather than leave a
+      // zero-length arrow, which renders as a lone arrowhead.
+      DocumentManager.deleteObject(id, true);
+    }
+
+    state.pendingArrowId = null;
+    state.pendingArrowStart = null;
+    state.snapAnchors = null;
+    state.activeId = null;
+    state.requestRender();
+  }
+
+  /** Abandon an arrow in progress. */
+  static cancelArrow() {
+    const id = state.pendingArrowId;
+    if (!id) return;
+
+    DocumentManager.deleteObject(id, true);
+    state.pendingArrowId = null;
+    state.pendingArrowStart = null;
+    state.snapAnchors = null;
+    state.activeId = null;
+    state.requestRender();
+  }
+
   static handleMouseMove(event) {
     const coords = CoordinateUtils.toCanvas(event);
+
+    // With the arrow tool active, show the anchors of whatever shape is under
+    // the pointer, so it is clear where the arrow will attach before clicking.
+    if (state.tool === 'arrow') {
+      const hit = GeometryUtils.findBindingAt(
+        coords.x,
+        coords.y,
+        DrawingTools.SNAP_RADIUS,
+        state.pendingArrowId
+      );
+
+      if (hit) {
+        const target = state.doc.objects[hit.id];
+        state.snapAnchors = {
+          points: Object.values(GeometryUtils.getAnchorPoints(target)),
+          active: hit.point
+        };
+      } else {
+        state.snapAnchors = null;
+      }
+      state.requestRender();
+    }
+
+    // An arrow in progress follows the pointer until the second click.
+    if (state.pendingArrowId) {
+      DrawingTools.resizeShape(state.pendingArrowId, coords.x, coords.y);
+      return;
+    }
 
     // Highlight what the select tool would pick up.
     if (state.tool === 'select' && !state.isDragging && !state.drawing) {
@@ -1599,6 +2050,19 @@ class InputHandler {
   }
 
   static handleMouseUp(event) {
+    // Released after dragging a decent distance? Treat it as a drawn arrow.
+    // A click barely moves, and leaves the arrow waiting for its second click.
+    if (state.pendingArrowId) {
+      const coords = CoordinateUtils.toCanvas(event);
+      const start = state.pendingArrowStart;
+      const moved = start
+        ? Math.hypot(coords.x - start.x, coords.y - start.y)
+        : 0;
+
+      if (moved > 8) this.finishArrow(coords);
+      return;
+    }
+
     if (state.isDragging) {
       state.isDragging = false;
       state.activeId = null;
@@ -1675,6 +2139,7 @@ class InputHandler {
         DrawingTools.beginFreeDrawing(id, state.tool, coords.x, coords.y);
         break;
       case 'line':
+      case 'arrow':
       case 'rect':
       case 'ellipse':
       case 'diamond':
@@ -2305,6 +2770,139 @@ class UIManager {
     }
   }
 
+  /**
+   * The drawing properties panel.
+   *
+   * Each row sets a value on `state`, which new shapes then pick up, and
+   * applies immediately to the current selection so a chosen colour or width
+   * can be seen straight away.
+   */
+  static setupPropertiesPanel() {
+    const setActive = (row, match) => {
+      row.querySelectorAll('.prop-btn, .swatch').forEach((btn) => {
+        btn.classList.toggle('active', match(btn));
+      });
+    };
+
+    // Applies a property to the selected object as well, when there is one.
+    const applyToSelection = (patch) => {
+      if (!state.selectedId) return;
+      DocumentManager.updateObject(state.selectedId, patch, true);
+    };
+
+    // ---- colour ---------------------------------------------------------
+    const swatchRow = document.querySelector('#colorGroup .swatch-row');
+    if (swatchRow) {
+      swatchRow.querySelectorAll('.swatch').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const colour = btn.dataset.color;
+          state.strokeColor = colour;
+          if (ui.color) ui.color.value = colour;
+          setActive(swatchRow, (b) => b.dataset.color === colour);
+          applyToSelection({ color: colour });
+        });
+      });
+      setActive(swatchRow, (b) => b.dataset.color === state.strokeColor);
+    }
+
+    if (ui.color) {
+      ui.color.addEventListener('input', () => {
+        state.strokeColor = ui.color.value;
+        if (swatchRow) setActive(swatchRow, () => false);
+        applyToSelection({ color: ui.color.value });
+      });
+    }
+
+    // ---- stroke width ----------------------------------------------------
+    const widthRow = document.querySelector('#widthGroup .prop-row');
+    if (widthRow) {
+      widthRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const width = parseInt(btn.dataset.width, 10);
+          state.strokeSize = width;
+          if (ui.size) ui.size.value = String(width);
+          setActive(widthRow, (b) => b.dataset.width === btn.dataset.width);
+          applyToSelection({ size: width });
+        });
+      });
+      setActive(widthRow, (b) => parseInt(b.dataset.width, 10) === state.strokeSize);
+    }
+
+    // ---- stroke style ----------------------------------------------------
+    const styleRow = document.querySelector('#styleGroup .prop-row');
+    if (styleRow) {
+      styleRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.strokeStyle = btn.dataset.style;
+          setActive(styleRow, (b) => b.dataset.style === btn.dataset.style);
+          applyToSelection({ strokeStyle: btn.dataset.style });
+        });
+      });
+      setActive(styleRow, (b) => b.dataset.style === state.strokeStyle);
+    }
+
+    // ---- sloppiness ------------------------------------------------------
+    const sloppyRow = document.querySelector('#sloppinessGroup .prop-row');
+    if (sloppyRow) {
+      sloppyRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const level = parseInt(btn.dataset.sloppiness, 10);
+          state.sloppiness = level;
+          setActive(sloppyRow, (b) => b.dataset.sloppiness === btn.dataset.sloppiness);
+          applyToSelection({ sloppiness: level });
+        });
+      });
+      setActive(sloppyRow, (b) => parseInt(b.dataset.sloppiness, 10) === state.sloppiness);
+    }
+
+    // ---- arrow type ------------------------------------------------------
+    const arrowRow = document.querySelector('#arrowTypeGroup .prop-row');
+    if (arrowRow) {
+      arrowRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.arrowType = btn.dataset.arrow;
+          setActive(arrowRow, (b) => b.dataset.arrow === btn.dataset.arrow);
+          applyToSelection({ arrowType: btn.dataset.arrow });
+        });
+      });
+      setActive(arrowRow, (b) => b.dataset.arrow === state.arrowType);
+    }
+
+    // ---- opacity ---------------------------------------------------------
+    if (ui.opacitySlider) {
+      const opacityText = document.querySelector('#opacity-text');
+      ui.opacitySlider.addEventListener('input', () => {
+        const percent = parseInt(ui.opacitySlider.value, 10);
+        state.strokeOpacity = percent / 100;
+        if (opacityText) opacityText.textContent = String(percent);
+        applyToSelection({ opacity: state.strokeOpacity });
+      });
+    }
+
+    // ---- layers ----------------------------------------------------------
+    const layerRow = document.querySelector('#layersGroup .prop-row');
+    if (layerRow) {
+      layerRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (!state.selectedId) {
+            UIManager.showSaveStatus('Select something first');
+            return;
+          }
+          DocumentManager.reorderObject(state.selectedId, btn.dataset.layer);
+        });
+      });
+    }
+
+    this.updatePropertiesForTool();
+  }
+
+  /** Arrow options only make sense while the arrow tool is active. */
+  static updatePropertiesForTool() {
+    const arrowGroup = document.querySelector('#arrowTypeGroup');
+    if (!arrowGroup) return;
+    arrowGroup.classList.toggle('hidden', state.tool !== 'arrow');
+  }
+
   /** Brief, unobtrusive confirmation that work is on disk. */
   static showSaveStatus(message, isError = false) {
     let el = document.querySelector('#save-status');
@@ -2797,6 +3395,7 @@ class WhiteboardApp {
     state.strokeColor = ui.color.value;
     state.strokeSize = parseInt(ui.size.value, 10);
 
+    UIManager.setupPropertiesPanel();
     AutoSave.install();
 
     UIManager.showSetup();

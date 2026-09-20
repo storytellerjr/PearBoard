@@ -65,6 +65,12 @@ export const state = {
   strokeColor: '#000000',
   strokeSize: 2,
   strokeOpacity: 1,
+  strokeStyle: 'solid',   // solid | dashed | dotted
+  sloppiness: 0,          // 0 architect, 1 artist, 2 cartoonist
+  arrowType: 'straight',  // straight | curved | elbow
+  snapAnchors: null,      // anchors shown while drawing an arrow
+  pendingArrowId: null,   // arrow awaiting its second click
+  pendingArrowStart: null,
   drawing: false,
   start: null,
   tempShape: null,

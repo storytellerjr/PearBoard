@@ -57,6 +57,7 @@
     <button class="btn" data-tool="select" title="Select and move (V)"><img class="icon" src="./assets/icons/pointer.svg" alt="icon" /></button>
     <button class="btn active" data-tool="pen" title="Pen (P)"><img class="icon" src="./assets/icons/pen.png" alt="icon" /></button>
     <button class="btn" data-tool="eraser" title="Eraser (E)"><img class="icon" src="assets/icons/eraser.png" alt="icon" /></button>
+    <button class="btn" data-tool="arrow" title="Arrow (A)"><img class="icon" src="./assets/icons/arrow-tool.svg" alt="icon" /></button>
     <button class="btn" data-tool="line" title="Line (L)"><img class="icon" src="assets/icons/line.png" alt="icon" /></button>
     <button class="btn" data-tool="rect" title="Rectangle (R)"><img class="icon" src="assets/icons/rect.png" alt="icon" /></button>
     <button class="btn" data-tool="ellipse" title="Ellipse (O)"><img class="icon" src="assets/icons/ellipse.png" alt="icon" /></button>
@@ -79,31 +80,109 @@
     </button>
 
     <div class="controls-container" id="controlsContainer">
-      <div class="group column" id="colorGroup">
-        <label class="label">Stroke</label>
-        <div style="width: 100%; display: flex; flex-direction: row; align-items: center; gap: 4px;">
-          <span style="width: 20px; height: 20px; overflow: hidden; border-radius: 12px;position: relative">
-            <input id="color" type="color" value="#111111" style="position: absolute;padding: 0;border: none;top: 50%;left: 50%;transform: translate(-50%, -46%);scale: 1.1;"/>
+      <div class="prop-group" id="colorGroup">
+        <label class="prop-label">Stroke</label>
+        <div class="swatch-row">
+          <button type="button" class="swatch" data-color="#1e1e1e" style="--swatch:#1e1e1e" title="Black"></button>
+          <button type="button" class="swatch" data-color="#e03131" style="--swatch:#e03131" title="Red"></button>
+          <button type="button" class="swatch" data-color="#2f9e44" style="--swatch:#2f9e44" title="Green"></button>
+          <button type="button" class="swatch" data-color="#1971c2" style="--swatch:#1971c2" title="Blue"></button>
+          <button type="button" class="swatch" data-color="#f08c00" style="--swatch:#f08c00" title="Orange"></button>
+          <span class="swatch-divider"></span>
+          <span class="swatch-custom" title="Custom colour">
+            <input id="color" type="color" value="#1e1e1e" />
           </span>
-          <p id="color-text">#111111</p>
         </div>
       </div>
 
-      <div class="group column" id="sizeGroup">
-        <div style="width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: space-between">
-          <label class="label">Size: </label>
-          <p id="size-text">6px</p>
+      <div class="prop-group" id="widthGroup">
+        <label class="prop-label">Stroke width</label>
+        <div class="prop-row">
+          <button type="button" class="prop-btn" data-width="2" title="Thin">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="prop-btn" data-width="6" title="Medium">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="prop-btn" data-width="12" title="Bold">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <input id="size" type="range" min="1" max="100" value="6" />
       </div>
 
-      <div class="group column" style="padding-bottom: 8px;" id="opacityGroup">
-        <div style="width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: space-between">
-          <label for="opacity-control" class="label">Opacity: </label>
-          <p id="opacity-text">1</p>
+      <div class="prop-group" id="styleGroup">
+        <label class="prop-label">Stroke style</label>
+        <div class="prop-row">
+          <button type="button" class="prop-btn" data-style="solid" title="Solid">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="prop-btn" data-style="dashed" title="Dashed">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="5 4"/></svg>
+          </button>
+          <button type="button" class="prop-btn" data-style="dotted" title="Dotted">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.5 4"/></svg>
+          </button>
         </div>
-        <input type="range" id="opacity-control" min="0" max="1" step="0.05" value="1" />
       </div>
+
+      <div class="prop-group" id="sloppinessGroup">
+        <label class="prop-label">Sloppiness</label>
+        <div class="prop-row">
+          <button type="button" class="prop-btn" data-sloppiness="0" title="Architect">
+            <svg viewBox="0 0 24 24"><path d="M4 14 Q12 10 20 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="prop-btn" data-sloppiness="1" title="Artist">
+            <svg viewBox="0 0 24 24"><path d="M4 15 Q8 9 12 13 T20 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="prop-btn" data-sloppiness="2" title="Cartoonist">
+            <svg viewBox="0 0 24 24"><path d="M4 16 Q7 8 10 14 T15 11 T20 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="prop-group hidden" id="arrowTypeGroup">
+        <label class="prop-label">Arrow type</label>
+        <div class="prop-row">
+          <button type="button" class="prop-btn" data-arrow="straight" title="Straight">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="18" y2="6"/><polyline points="12,5 19,5 19,12"/></g></svg>
+          </button>
+          <button type="button" class="prop-btn" data-arrow="curved" title="Curved">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18 Q7 7 18 6"/><polyline points="13,4 19,6 15,11"/></g></svg>
+          </button>
+          <button type="button" class="prop-btn" data-arrow="elbow" title="Elbow">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,19 13,19 13,7"/><polyline points="9,10 13,6 17,10"/></g></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="prop-group" id="opacityGroup">
+        <label class="prop-label">Opacity</label>
+        <input type="range" id="opacity-control" min="0" max="100" step="5" value="100" />
+        <div class="slider-scale"><span>0</span><span id="opacity-text">100</span></div>
+      </div>
+
+      <div class="prop-group" id="layersGroup">
+        <label class="prop-label">Layers</label>
+        <div class="prop-row">
+          <button type="button" class="prop-btn" data-layer="back" title="Send to back">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,10 12,14 16,10"/><line x1="12" y1="4" x2="12" y2="14"/><line x1="5" y1="19" x2="19" y2="19"/></g></svg>
+          </button>
+          <button type="button" class="prop-btn" data-layer="backward" title="Send backward">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,12 12,16 16,12"/><line x1="12" y1="5" x2="12" y2="16"/></g></svg>
+          </button>
+          <button type="button" class="prop-btn" data-layer="forward" title="Bring forward">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,12 12,8 16,12"/><line x1="12" y1="19" x2="12" y2="8"/></g></svg>
+          </button>
+          <button type="button" class="prop-btn" data-layer="front" title="Bring to front">
+            <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,14 12,10 16,14"/><line x1="12" y1="20" x2="12" y2="10"/><line x1="5" y1="5" x2="19" y2="5"/></g></svg>
+          </button>
+        </div>
+      </div>
+
+      <input id="size" type="range" min="1" max="100" value="6" class="hidden" />
+      <p id="size-text" class="hidden">6px</p>
+      <p id="color-text" class="hidden">#1e1e1e</p>
+
     </div>
   </div>
 </header>

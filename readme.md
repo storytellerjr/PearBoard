@@ -130,6 +130,17 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 **Drag and drop**
 - Icons are dragged onto the board and land where they are dropped, tracked with pointer events so it works with a mouse, a trackpad or a touchscreen
 
+**Arrows that stay attached**
+- An arrow tool: click where it starts, watch the line follow the pointer, click where the head goes. Dragging works too
+- Straight, curved and elbow arrows
+- Hover any box, circle or diamond and its four anchor points appear; both ends of an arrow snap to the nearest one
+- Arrows bind to *what* they point at, not to a position — move the shape and the arrow follows
+
+**Shape properties**
+- Colour swatches, three stroke widths, solid/dashed/dotted, three sloppiness levels, opacity, and layer ordering
+- Properties apply to new shapes and to the current selection
+- Sloppiness is seeded from the object's id, so a shape wobbles identically on every frame and on every peer's screen
+
 **Select and move things**
 - A pointer tool: hover to highlight, click to select, drag to move, Delete to remove — on strokes, shapes, text and icons alike
 - Object dragging already existed but was hidden behind holding Shift, with no outline drawn and no way to discover it. Shift-drag still works with any tool
