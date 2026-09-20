@@ -1,7 +1,6 @@
-import Corestore from 'corestore';
 import Hyperbee from 'hyperbee';
 import {CanvasManager, NetworkManager, PEAR_PATH, ui} from '../app.js';
-import {globalState} from "../storage/GlobalState.js";
+import {globalState, getStore} from "../storage/GlobalState.js";
 import {state} from "../storage/AppState.js";
 
 let roomDB;
@@ -11,8 +10,7 @@ async function setupRoomStorage() {
     if (isStorageInitialized) return;
 
     console.log('Initializing room storage at:', PEAR_PATH);
-    const corestore = new Corestore(PEAR_PATH);
-    await corestore.ready();
+    const corestore = await getStore();
 
     const roomsCore = corestore.get({ name: 'rooms-metadata' });
     await roomsCore.ready();
