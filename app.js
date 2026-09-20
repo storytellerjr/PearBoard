@@ -27,7 +27,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 13:06:47'
+export const BUILD_STAMP = 'build 13:23:09'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -793,34 +793,166 @@ class ObjectRenderer {
     state.ctx.stroke();
   }
 
+  /**
+   * A hachure or cross-hatch pattern in the given colour.
+   *
+   * Built once per colour and style and cached — creating a pattern tile on
+   * every frame would be wasteful, and the canvas redraws constantly.
+   */
+  static fillPattern(colour, style) {
+    if (!CanvasManager._patterns) CanvasManager._patterns = new Map();
+    const key = `${colour}|${style}`;
+
+    const cached = CanvasManager._patterns.get(key);
+    if (cached) return cached;
+
+    const size = 10;
+    const tile = document.createElement('canvas');
+    tile.width = size;
+    tile.height = size;
+
+    const tc = tile.getContext('2d');
+    tc.strokeStyle = colour;
+    tc.lineWidth = 1.4;
+    tc.lineCap = 'round';
+
+    // Diagonal, drawn twice at the tile edges so the lines meet seamlessly.
+    tc.beginPath();
+    tc.moveTo(-2, size + 2);
+    tc.lineTo(size + 2, -2);
+    tc.moveTo(size - 2, size + 2);
+    tc.lineTo(size + 2, size - 2);
+    tc.moveTo(-2, 2);
+    tc.lineTo(2, -2);
+    tc.stroke();
+
+    if (style === 'cross-hatch') {
+      tc.beginPath();
+      tc.moveTo(-2, -2);
+      tc.lineTo(size + 2, size + 2);
+      tc.moveTo(size - 2, -2);
+      tc.lineTo(size + 2, 2);
+      tc.moveTo(-2, size - 2);
+      tc.lineTo(2, size + 2);
+      tc.stroke();
+    }
+
+    const pattern = state.ctx.createPattern(tile, 'repeat');
+    CanvasManager._patterns.set(key, pattern);
+    return pattern;
+  }
+
+  /** Fill a shape's current path according to its background and fill style. */
+  static fillShape(obj) {
+    const bg = obj.backgroundColor;
+    if (!bg || bg === 'transparent') return;
+
+    const ctx = state.ctx;
+    ctx.save();
+
+    if (obj.fillStyle === 'hachure' || obj.fillStyle === 'cross-hatch') {
+      ctx.fillStyle = this.fillPattern(bg, obj.fillStyle);
+    } else {
+      ctx.fillStyle = bg;
+    }
+
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Corner radius for a rounded rectangle, kept sane on small shapes. */
+  static cornerRadius(obj, w, h) {
+    if (obj.edges !== 'round') return 0;
+    return Math.min(32, Math.abs(w) * 0.25, Math.abs(h) * 0.25);
+  }
+
   static renderRect(obj) {
-    state.ctx.strokeRect(obj.x, obj.y, obj.w || 0, obj.h || 0);
+    const ctx = state.ctx;
+    const w = obj.w || 0;
+    const h = obj.h || 0;
+    const r = this.cornerRadius(obj, w, h);
+
+    const x = Math.min(obj.x, obj.x + w);
+    const y = Math.min(obj.y, obj.y + h);
+    const aw = Math.abs(w);
+    const ah = Math.abs(h);
+
+    const buildPath = () => {
+      if (r > 0 && typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, aw, ah, r);
+      } else {
+        ctx.rect(obj.x, obj.y, w, h);
+      }
+    };
+
+    // The fill always follows the true shape.
+    ctx.beginPath();
+    buildPath();
+    this.fillShape(obj);
+
+    if (this.sloppyAmount(obj) === 0) {
+      ctx.stroke();
+      return;
+    }
+
+    if (r > 0) {
+      // Rounded: keep the real outline, gone over twice.
+      this.strokeSloppy(obj, buildPath, { skipFill: true });
+      return;
+    }
+
+    // Sharp: four separate edges, each overshooting its corners.
+    this.strokeEdges(obj, [
+      [x, y, x + aw, y],
+      [x + aw, y, x + aw, y + ah],
+      [x + aw, y + ah, x, y + ah],
+      [x, y + ah, x, y]
+    ]);
   }
 
   static renderEllipse(obj) {
+    const ctx = state.ctx;
     const radiusX = Math.abs(obj.w || 0) / 2;
     const radiusY = Math.abs(obj.h || 0) / 2;
     const centerX = obj.x + (obj.w || 0) / 2;
     const centerY = obj.y + (obj.h || 0) / 2;
 
-    state.ctx.beginPath();
-    state.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
-    state.ctx.stroke();
+    this.strokeSloppy(obj, () => {
+      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+    });
   }
 
   static renderDiamond(obj) {
+    const ctx = state.ctx;
     const width = obj.w || 0;
     const height = obj.h || 0;
-    const centerX = obj.x + width / 2;
-    const centerY = obj.y + height / 2;
+    const cx = obj.x + width / 2;
+    const cy = obj.y + height / 2;
 
-    state.ctx.beginPath();
-    state.ctx.moveTo(centerX, obj.y);
-    state.ctx.lineTo(obj.x + width, centerY);
-    state.ctx.lineTo(centerX, obj.y + height);
-    state.ctx.lineTo(obj.x, centerY);
-    state.ctx.closePath();
-    state.ctx.stroke();
+    const top = [cx, obj.y];
+    const right = [obj.x + width, cy];
+    const bottom = [cx, obj.y + height];
+    const left = [obj.x, cy];
+
+    ctx.beginPath();
+    ctx.moveTo(top[0], top[1]);
+    ctx.lineTo(right[0], right[1]);
+    ctx.lineTo(bottom[0], bottom[1]);
+    ctx.lineTo(left[0], left[1]);
+    ctx.closePath();
+    this.fillShape(obj);
+
+    if (this.sloppyAmount(obj) === 0) {
+      ctx.stroke();
+      return;
+    }
+
+    this.strokeEdges(obj, [
+      [...top, ...right],
+      [...right, ...bottom],
+      [...bottom, ...left],
+      [...left, ...top]
+    ]);
   }
 
   static renderText(obj) {
@@ -873,7 +1005,113 @@ class ObjectRenderer {
 
   static sloppyAmount(obj) {
     const level = obj.sloppiness ?? 0;
-    return level === 0 ? 0 : level === 1 ? 2.5 : 5;
+    return level === 0 ? 0 : level === 1 ? 1.6 : 3.2;
+  }
+
+  /**
+   * One edge, drawn as a hand would: a slightly bowed line that runs a little
+   * past each end.
+   *
+   * The overshoot is what makes hand-drawn corners read as hand-drawn — the
+   * strokes cross slightly instead of meeting exactly. A single closed path
+   * can never produce it, however much it is nudged.
+   */
+  static sloppyEdge(x1, y1, x2, y2, seed, amount) {
+    const ctx = state.ctx;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+
+    // Run past both ends by a little, scaled to the line and the amount.
+    const over = Math.min(len * 0.04, amount * 1.8);
+    const o1 = this.wobble(seed, 1, amount * 0.5);
+    const o2 = this.wobble(seed, 2, amount * 0.5);
+
+    const sx = x1 - ux * over + o1.x;
+    const sy = y1 - uy * over + o1.y;
+    const ex = x2 + ux * over + o2.x;
+    const ey = y2 + uy * over + o2.y;
+
+    // Bow the middle perpendicular to the line.
+    const bow = this.wobble(seed, 3, amount).x * 1.4;
+    const mx = (sx + ex) / 2 - uy * bow;
+    const my = (sy + ey) / 2 + ux * bow;
+
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(mx, my, ex, ey);
+  }
+
+  /** Stroke a set of edges twice, as a pen gone over them would. */
+  static strokeEdges(obj, edges) {
+    const ctx = state.ctx;
+    const amount = this.sloppyAmount(obj);
+    const baseAlpha = ctx.globalAlpha;
+
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.beginPath();
+      edges.forEach(([x1, y1, x2, y2], i) => {
+        this.sloppyEdge(x1, y1, x2, y2, `${obj.id}:${pass}:${i}`, amount);
+      });
+      ctx.globalAlpha = baseAlpha * (pass === 0 ? 1 : 0.7);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = baseAlpha;
+  }
+
+  /**
+   * Stroke a shape the way a hand would.
+   *
+   * The hand-drawn look is not jitter on the points — that reads as noise.
+   * It is the same confident line gone over twice, each pass slightly
+   * displaced and rotated. `buildPath` is called once per pass so the shape
+   * stays exactly itself, only nudged.
+   *
+   * The displacement is seeded from the object id, so a shape looks identical
+   * on every frame and on every peer's screen.
+   */
+  static strokeSloppy(obj, buildPath, { skipFill = false } = {}) {
+    const ctx = state.ctx;
+    const amount = this.sloppyAmount(obj);
+
+    if (amount === 0) {
+      ctx.beginPath();
+      buildPath();
+      if (!skipFill) this.fillShape(obj);
+      ctx.stroke();
+      return;
+    }
+
+    // First pass carries the fill; both passes carry the line.
+    const passes = [
+      { seed: 0, alpha: 1 },
+      { seed: 1, alpha: 0.75 }
+    ];
+
+    const baseAlpha = ctx.globalAlpha;
+
+    passes.forEach((pass, index) => {
+      const d = this.wobble(obj.id, pass.seed, amount);
+      const tilt = this.wobble(obj.id, pass.seed + 10, amount).x * 0.0016;
+
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      ctx.rotate(tilt);
+
+      ctx.beginPath();
+      buildPath();
+
+      if (index === 0 && !skipFill) this.fillShape(obj);
+
+      ctx.globalAlpha = baseAlpha * pass.alpha;
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    ctx.globalAlpha = baseAlpha;
   }
 
   static renderArrow(obj) {
@@ -1225,7 +1463,7 @@ class DrawingTools {
       state.hoverId = null;
     }
     ui.canvas.style.cursor = 'default';
-    UIManager.updatePropertiesForTool();
+    UIManager.updateProperties({ open: true });
     state.requestRender();
 
     // Update UI
@@ -1425,6 +1663,9 @@ class DrawingTools {
       opacity: state.strokeOpacity ?? 1,
       strokeStyle: state.strokeStyle || 'solid',
       sloppiness: state.sloppiness ?? 0,
+      backgroundColor: state.backgroundColor || 'transparent',
+      fillStyle: state.fillStyle || 'solid',
+      edges: state.edges || 'sharp',
       createdBy: state.localPeerId,
       rev: 0
     };
@@ -1879,6 +2120,7 @@ class InputHandler {
           DocumentManager.deleteObject(state.selectedId, true);
           state.selectedId = null;
           state.hoverId = null;
+          UIManager.updateProperties();
           state.requestRender();
         }
       }
@@ -1949,6 +2191,7 @@ class InputHandler {
       if (objectId) {
         state.selectedId = objectId;
         this.startDragging(objectId, coords);
+        UIManager.updateProperties({ open: true });
         state.requestRender();
         return;
       }
@@ -1956,6 +2199,7 @@ class InputHandler {
       if (state.tool === 'select') {
         // Clicking empty space clears the selection.
         state.selectedId = null;
+        UIManager.updateProperties();
         state.requestRender();
         return;
       }
@@ -2813,6 +3057,56 @@ class UIManager {
       });
     }
 
+    // ---- background ------------------------------------------------------
+    const bgRow = document.querySelector('#backgroundGroup .swatch-row');
+    const bgInput = document.querySelector('#bg-color');
+    if (bgRow) {
+      bgRow.querySelectorAll('.swatch').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const colour = btn.dataset.bg;
+          state.backgroundColor = colour;
+          if (bgInput && colour !== 'transparent') bgInput.value = colour;
+          setActive(bgRow, (b) => b.dataset.bg === colour);
+          applyToSelection({ backgroundColor: colour });
+        });
+      });
+      setActive(bgRow, (b) => b.dataset.bg === state.backgroundColor);
+    }
+
+    if (bgInput) {
+      bgInput.addEventListener('input', () => {
+        state.backgroundColor = bgInput.value;
+        if (bgRow) setActive(bgRow, () => false);
+        applyToSelection({ backgroundColor: bgInput.value });
+      });
+    }
+
+    // ---- fill style ------------------------------------------------------
+    const fillRow = document.querySelector('#fillGroup .prop-row');
+    if (fillRow) {
+      fillRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.fillStyle = btn.dataset.fill;
+          setActive(fillRow, (b) => b.dataset.fill === btn.dataset.fill);
+          applyToSelection({ fillStyle: btn.dataset.fill });
+        });
+      });
+      setActive(fillRow, (b) => b.dataset.fill === state.fillStyle);
+    }
+
+    // ---- edges -----------------------------------------------------------
+    const edgesRow = document.querySelector('#edgesGroup .prop-row');
+    if (edgesRow) {
+      edgesRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.edges = btn.dataset.edges;
+          setActive(edgesRow, (b) => b.dataset.edges === btn.dataset.edges);
+          applyToSelection({ edges: btn.dataset.edges });
+        });
+      });
+      setActive(edgesRow, (b) => b.dataset.edges === state.edges);
+    }
+
     // ---- stroke width ----------------------------------------------------
     const widthRow = document.querySelector('#widthGroup .prop-row');
     if (widthRow) {
@@ -2893,14 +3187,82 @@ class UIManager {
       });
     }
 
-    this.updatePropertiesForTool();
+    this.updateProperties();
   }
 
-  /** Arrow options only make sense while the arrow tool is active. */
+  /**
+   * Which property groups apply to each kind of thing.
+   *
+   * Keyed by object type, with the drawing tools mapping onto the type they
+   * produce. Anything not listed falls back to the common set.
+   */
+  static PROPERTY_GROUPS = {
+    pen:     ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
+    line:    ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
+    arrow:   ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'arrowTypeGroup', 'opacityGroup', 'layersGroup'],
+    rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'opacityGroup', 'layersGroup'],
+    ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
+    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
+    text:    ['colorGroup', 'opacityGroup', 'layersGroup'],
+    image:   ['opacityGroup', 'layersGroup'],
+    eraser:  [],
+    select:  [],
+    hand:    []
+  };
+
+  /**
+   * Show the properties that belong to whatever is in focus: the selected
+   * object if there is one, otherwise the active drawing tool. Selecting
+   * something opens the panel, as it does in the tools this follows.
+   */
+  static updateProperties({ open = false } = {}) {
+    const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
+    const kind = selected ? selected.type : state.tool;
+    const groups = this.PROPERTY_GROUPS[kind] || this.PROPERTY_GROUPS.pen;
+
+    document.querySelectorAll('.prop-group').forEach((group) => {
+      group.classList.toggle('hidden', !groups.includes(group.id));
+    });
+
+    // With nothing to configure, leave the panel alone entirely.
+    const panel = document.querySelector('.drawing-controls');
+    if (panel) panel.classList.toggle('hidden', groups.length === 0);
+
+    if (selected) this.syncPropertiesFrom(selected);
+
+    if (open && groups.length > 0 && window.drawingControls) {
+      window.drawingControls.toggle(true);
+    }
+  }
+
+  /** Reflect an object's own values in the controls. */
+  static syncPropertiesFrom(obj) {
+    const mark = (selector, matches) => {
+      document.querySelectorAll(selector).forEach((btn) => {
+        btn.classList.toggle('active', matches(btn));
+      });
+    };
+
+    mark('#colorGroup .swatch', (b) => b.dataset.color === obj.color);
+    if (ui.color && obj.color) ui.color.value = obj.color;
+
+    mark('#widthGroup .prop-btn', (b) => parseInt(b.dataset.width, 10) === obj.size);
+    mark('#styleGroup .prop-btn', (b) => b.dataset.style === (obj.strokeStyle || 'solid'));
+    mark('#sloppinessGroup .prop-btn', (b) => parseInt(b.dataset.sloppiness, 10) === (obj.sloppiness ?? 0));
+    mark('#arrowTypeGroup .prop-btn', (b) => b.dataset.arrow === (obj.arrowType || 'straight'));
+    mark('#backgroundGroup .swatch', (b) => b.dataset.bg === (obj.backgroundColor || 'transparent'));
+    mark('#fillGroup .prop-btn', (b) => b.dataset.fill === (obj.fillStyle || 'solid'));
+    mark('#edgesGroup .prop-btn', (b) => b.dataset.edges === (obj.edges || 'sharp'));
+
+    const percent = Math.round((obj.opacity ?? 1) * 100);
+    if (ui.opacitySlider) ui.opacitySlider.value = String(percent);
+    const opacityText = document.querySelector('#opacity-text');
+    if (opacityText) opacityText.textContent = String(percent);
+  }
+
+  /** Kept for callers that only care about the active tool. */
   static updatePropertiesForTool() {
-    const arrowGroup = document.querySelector('#arrowTypeGroup');
-    if (!arrowGroup) return;
-    arrowGroup.classList.toggle('hidden', state.tool !== 'arrow');
+    this.updateProperties();
   }
 
   /** Brief, unobtrusive confirmation that work is on disk. */

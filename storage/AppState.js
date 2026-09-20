@@ -66,6 +66,9 @@ export const state = {
   strokeSize: 2,
   strokeOpacity: 1,
   strokeStyle: 'solid',   // solid | dashed | dotted
+  backgroundColor: 'transparent',
+  fillStyle: 'solid',     // hachure | cross-hatch | solid
+  edges: 'sharp',         // sharp | round
   sloppiness: 0,          // 0 architect, 1 artist, 2 cartoonist
   arrowType: 'straight',  // straight | curved | elbow
   snapAnchors: null,      // anchors shown while drawing an arrow
