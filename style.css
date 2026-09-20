@@ -1445,3 +1445,25 @@ input[type="range"]::-ms-fill-upper {
   background-position: 0 0, 0 4px, 4px -4px, -4px 0;
   background-color: #fff;
 }
+
+/* ---- Fonts ---------------------------------------------------------------
+   Bundled, not fetched: a peer-to-peer board should render correctly with no
+   network. See assets/fonts/README.md for licensing. */
+
+@font-face {
+  font-family: 'Architects Daughter';
+  src: url('./assets/fonts/ArchitectsDaughter.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+.font-preview-hand {
+  font-family: 'Architects Daughter', cursive;
+}
+
+.prop-btn-text {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+}

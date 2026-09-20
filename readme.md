@@ -136,6 +136,16 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 - Hover any box, circle or diamond and its four anchor points appear; both ends of an arrow snap to the nearest one
 - Arrows bind to *what* they point at, not to a position — move the shape and the arrow follows
 
+**Shapes that look drawn by hand**
+- Background and fill (hachure, cross-hatch, solid), rounded or sharp edges
+- The hand-drawn look comes from each edge being its own slightly bowed line that overshoots its corners, stroked twice — not from jittering points, which reads as noise
+- Sensible defaults: a soft green box with a black outline and rounded corners
+
+**Text with a real hand-drawn font**
+- Architects Daughter is bundled (SIL Open Font License), so a board renders correctly with no network — this is a peer-to-peer app
+- Three families, four sizes, and alignment; the editor uses the same font as the canvas, so what you type is what you get
+- Multi-line text renders as multiple lines, which it did not before
+
 **Shape properties**
 - Colour swatches, three stroke widths, solid/dashed/dotted, three sloppiness levels, opacity, and layer ordering
 - Properties apply to new shapes and to the current selection

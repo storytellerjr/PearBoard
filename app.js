@@ -20,6 +20,20 @@ export const PEAR_PATH = Pear.config.storage
  * page scrolling. Without this check those handlers also fire while someone is
  * typing, so a space could not be entered into any input on the board.
  */
+/** The three font families offered, as CSS stacks. */
+export const FONT_STACKS = {
+  hand: "'Architects Daughter', 'Comic Sans MS', cursive",
+  normal: "'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  code: "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Mono', monospace"
+}
+
+/** A canvas font string for an object, falling back to sensible defaults. */
+export function fontStringFor (obj) {
+  const size = obj.fontSize || 20
+  const stack = FONT_STACKS[obj.fontFamily] || FONT_STACKS.hand
+  return `${size}px ${stack}`
+}
+
 export function isTypingTarget (target) {
   if (!target) return false
   const tag = target.tagName
@@ -27,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 13:23:09'
+export const BUILD_STAMP = 'build 13:35:09'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -956,11 +970,22 @@ class ObjectRenderer {
   }
 
   static renderText(obj) {
-    state.ctx.fillStyle = obj.color;
-    state.ctx.font = obj.font || '16px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial';
-    state.ctx.textAlign = obj.align || 'left';
-    state.ctx.textBaseline = obj.baseline || 'top';
-    state.ctx.fillText(obj.text || '', obj.x, obj.y);
+    const ctx = state.ctx;
+    ctx.setLineDash([]);
+    ctx.fillStyle = obj.color;
+    ctx.font = obj.fontFamily || obj.fontSize
+      ? fontStringFor(obj)
+      : (obj.font || '20px sans-serif');
+    ctx.textAlign = obj.align || 'left';
+    ctx.textBaseline = obj.baseline || 'top';
+
+    // Text may hold newlines once it is edited in a textarea.
+    const lines = String(obj.text || '').split('\n');
+    const lineHeight = (obj.fontSize || 20) * 1.25;
+
+    lines.forEach((line, i) => {
+      ctx.fillText(line, obj.x, obj.y + i * lineHeight);
+    });
   }
 
   /** Dash pattern for a stroke style, scaled so it reads at any zoom. */
@@ -1724,7 +1749,7 @@ class TextEditor {
     this.close(true);
 
     const id = state.generateRandomId();
-    const fontPixels = Math.max(12, state.strokeSize * 3);
+    const fontPixels = state.fontSize || 20;
 
     // Create text object
     const textObj = {
@@ -1735,8 +1760,10 @@ class TextEditor {
       text: initialText,
       color: state.strokeColor,
       size: state.strokeSize,
-      font: `${fontPixels}px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial`,
-      align: 'left',
+      fontFamily: state.fontFamily || 'hand',
+      fontSize: fontPixels,
+      font: `${fontPixels}px ${FONT_STACKS[state.fontFamily] || FONT_STACKS.hand}`,
+      align: state.textAlign || 'center',
       baseline: 'top',
       createdBy: state.localPeerId,
       rev: 0
@@ -1779,8 +1806,10 @@ class TextEditor {
       position: 'absolute',
       left: `${x}px`,
       top: `${y}px`,
-      font: textObj.font,
+      font: '',
+      fontFamily: FONT_STACKS[textObj.fontFamily] || FONT_STACKS.hand,
       fontSize: `${fontPixels}px`,
+      textAlign: textObj.align || 'left',
       color: textObj.color,
       border: '2px solid #007bff',
       background: 'rgba(255, 255, 255, 0.95)',
@@ -3162,6 +3191,49 @@ class UIManager {
       setActive(arrowRow, (b) => b.dataset.arrow === state.arrowType);
     }
 
+    // ---- font family -----------------------------------------------------
+    const fontRow = document.querySelector('#fontFamilyGroup .prop-row');
+    if (fontRow) {
+      fontRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.fontFamily = btn.dataset.font;
+          setActive(fontRow, (b) => b.dataset.font === btn.dataset.font);
+          applyToSelection({
+            fontFamily: btn.dataset.font,
+            font: FONT_STACKS[btn.dataset.font]
+          });
+        });
+      });
+      setActive(fontRow, (b) => b.dataset.font === state.fontFamily);
+    }
+
+    // ---- font size -------------------------------------------------------
+    const fontSizeRow = document.querySelector('#fontSizeGroup .prop-row');
+    if (fontSizeRow) {
+      fontSizeRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const size = parseInt(btn.dataset.size, 10);
+          state.fontSize = size;
+          setActive(fontSizeRow, (b) => b.dataset.size === btn.dataset.size);
+          applyToSelection({ fontSize: size });
+        });
+      });
+      setActive(fontSizeRow, (b) => parseInt(b.dataset.size, 10) === state.fontSize);
+    }
+
+    // ---- text align ------------------------------------------------------
+    const alignRow = document.querySelector('#textAlignGroup .prop-row');
+    if (alignRow) {
+      alignRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.textAlign = btn.dataset.align;
+          setActive(alignRow, (b) => b.dataset.align === btn.dataset.align);
+          applyToSelection({ align: btn.dataset.align });
+        });
+      });
+      setActive(alignRow, (b) => b.dataset.align === state.textAlign);
+    }
+
     // ---- opacity ---------------------------------------------------------
     if (ui.opacitySlider) {
       const opacityText = document.querySelector('#opacity-text');
@@ -3203,7 +3275,7 @@ class UIManager {
     rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'opacityGroup', 'layersGroup'],
     ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
     diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
-    text:    ['colorGroup', 'opacityGroup', 'layersGroup'],
+    text:    ['colorGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     image:   ['opacityGroup', 'layersGroup'],
     eraser:  [],
     select:  [],
@@ -3253,6 +3325,9 @@ class UIManager {
     mark('#backgroundGroup .swatch', (b) => b.dataset.bg === (obj.backgroundColor || 'transparent'));
     mark('#fillGroup .prop-btn', (b) => b.dataset.fill === (obj.fillStyle || 'solid'));
     mark('#edgesGroup .prop-btn', (b) => b.dataset.edges === (obj.edges || 'sharp'));
+    mark('#fontFamilyGroup .prop-btn', (b) => b.dataset.font === (obj.fontFamily || 'hand'));
+    mark('#fontSizeGroup .prop-btn', (b) => parseInt(b.dataset.size, 10) === (obj.fontSize || 20));
+    mark('#textAlignGroup .prop-btn', (b) => b.dataset.align === (obj.align || 'left'));
 
     const percent = Math.round((obj.opacity ?? 1) * 100);
     if (ui.opacitySlider) ui.opacitySlider.value = String(percent);

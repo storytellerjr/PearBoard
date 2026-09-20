@@ -62,14 +62,19 @@ export const state = {
 
   // ---- tools and drawing --------------------------------------------------
   tool: 'pen',
-  strokeColor: '#000000',
-  strokeSize: 2,
+  // Defaults chosen to match how boards are actually drawn here: a soft green
+  // box with a black hand-drawn outline and rounded corners.
+  strokeColor: '#1e1e1e',
+  strokeSize: 6,          // medium
   strokeOpacity: 1,
   strokeStyle: 'solid',   // solid | dashed | dotted
-  backgroundColor: 'transparent',
+  backgroundColor: '#b2f2bb',
   fillStyle: 'solid',     // hachure | cross-hatch | solid
-  edges: 'sharp',         // sharp | round
-  sloppiness: 0,          // 0 architect, 1 artist, 2 cartoonist
+  edges: 'round',         // sharp | round
+  fontFamily: 'hand',     // hand | normal | code
+  fontSize: 20,           // S 16 | M 20 | L 28 | XL 36
+  textAlign: 'center',    // left | center | right
+  sloppiness: 2,          // 0 architect, 1 artist, 2 cartoonist
   arrowType: 'straight',  // straight | curved | elbow
   snapAnchors: null,      // anchors shown while drawing an arrow
   pendingArrowId: null,   // arrow awaiting its second click
