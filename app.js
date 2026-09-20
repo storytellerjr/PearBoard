@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 15:33:01'
+export const BUILD_STAMP = 'build 16:12:20'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -788,8 +788,9 @@ class ObjectRenderer {
 
     ctx.globalAlpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
 
-    // A backing panel behind the artwork, so an icon can sit on a colour.
-    if (obj.backgroundColor && obj.backgroundColor !== 'transparent') {
+    const hasBackground = obj.backgroundColor && obj.backgroundColor !== 'transparent';
+
+    if (hasBackground) {
       const pad = 10;
       const r = this.cornerRadius(obj, w + pad * 2, h + pad * 2);
 
@@ -800,9 +801,54 @@ class ObjectRenderer {
         ctx.rect(obj.x - pad, obj.y - pad, w + pad * 2, h + pad * 2);
       }
       this.fillShape(obj);
+
+      // Most icon art has an opaque white background, so a panel drawn behind
+      // it would be painted straight over and only show as a border. Drawing
+      // the image in 'multiply' lets white pass the colour through while the
+      // dark lines stay dark — which is what changing an icon's background is
+      // expected to do.
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.drawImage(entry.img, obj.x, obj.y, w, h);
+      ctx.restore();
+    } else {
+      ctx.drawImage(entry.img, obj.x, obj.y, w, h);
     }
 
-    ctx.drawImage(entry.img, obj.x, obj.y, w, h);
+    // A frame round the image. The stroke colour never touches the artwork
+    // itself — the colours inside an icon belong to whoever drew it.
+    if (obj.strokeVisible !== false && (obj.size || 0) > 0) {
+      const pad = 10;
+      const frame = {
+        ...obj,
+        w: w + pad * 2,
+        h: h + pad * 2
+      };
+      const r = this.cornerRadius(obj, frame.w, frame.h);
+
+      ctx.save();
+      ctx.lineWidth = obj.size || 2;
+      ctx.strokeStyle = obj.color || '#1e1e1e';
+      this.applyStrokeStyle(obj.strokeStyle, obj.size);
+
+      const drawFrame = () => {
+        if (r > 0 && typeof ctx.roundRect === 'function') {
+          ctx.roundRect(obj.x - pad, obj.y - pad, frame.w, frame.h, r);
+        } else {
+          ctx.rect(obj.x - pad, obj.y - pad, frame.w, frame.h);
+        }
+      };
+
+      if (this.sloppyAmount(obj) > 0) {
+        this.strokeSloppy(frame, drawFrame, { skipFill: true });
+      } else {
+        ctx.beginPath();
+        drawFrame();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     ctx.globalAlpha = 1;
 
     this.renderLabel(obj);
@@ -918,6 +964,12 @@ class ObjectRenderer {
 
     const ctx = state.ctx;
     ctx.save();
+
+    // Opacity is baked into the stroke colour elsewhere, but a background is
+    // used as given — so it has to be applied here, or a shape with a fill
+    // would ignore its own opacity entirely.
+    const alpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
+    ctx.globalAlpha = ctx.globalAlpha * alpha;
 
     if (obj.fillStyle === 'hachure' || obj.fillStyle === 'cross-hatch') {
       ctx.fillStyle = this.fillPattern(bg, obj.fillStyle);
@@ -1072,7 +1124,7 @@ class ObjectRenderer {
     ctx.textAlign = align;
 
     // Diamonds taper, so their usable width is about half the box.
-    const inset = obj.type === 'diamond' ? 0.5 : obj.type === 'image' ? 1.1 : 0.85;
+    const inset = obj.type === 'diamond' ? 0.5 : 0.85;
     const maxWidth = Math.max(20, b.w * inset);
 
     // An arrow has no body to sit in, so clear the line behind the words.
@@ -1081,10 +1133,11 @@ class ObjectRenderer {
     const lines = this.wrapText(text, maxWidth);
     const lineHeight = size * 1.25;
 
-    // An image's text is a caption: it belongs under the artwork, not across
-    // the middle of it. Everything else centres in its shape.
+    // An image's text sits low inside its box rather than across the middle
+    // of the artwork — a caption within the frame, not floating beneath it.
+    // Multiple lines stack upward from the bottom. Everything else centres.
     const startY = obj.type === 'image'
-      ? b.y + b.h + lineHeight * 0.9
+      ? b.y + b.h - lineHeight * 0.75 - (lines.length - 1) * lineHeight
       : b.y + b.h / 2 - ((lines.length - 1) * lineHeight) / 2;
 
     // Where each line is anchored depends on the alignment; the inset keeps
@@ -2073,9 +2126,9 @@ class LabelEditor {
     // Place the editor centred on the shape rather than at its top-left. An
     // arrow's box is a pixel or two tall when it runs straight across, so
     // anchoring to the top put the words above the line instead of on it.
-    // An image's caption sits under it, so the editor opens there too.
+    // The editor opens where the caption will be drawn: low inside the box.
     const anchorY = obj.type === 'image'
-      ? b.y + b.h + (obj.labelSize || 20) * 0.9
+      ? b.y + b.h - (obj.labelSize || 20) * 0.9
       : b.y + b.h / 2;
     const centre = CoordinateUtils.worldToScreen(b.x + b.w / 2, anchorY);
     const boxWidth = Math.max(b.w * state.zoom, 120);
@@ -3861,6 +3914,13 @@ class UIManager {
       });
     }
 
+    document.querySelectorAll('.prop-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.activeTab = btn.dataset.tab;
+        this.updateProperties();
+      });
+    });
+
     this.updateProperties();
   }
 
@@ -3878,7 +3938,7 @@ class UIManager {
     ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     text:    ['colorGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
-    image:   ['backgroundGroup', 'fillGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
+    image:   ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'backgroundGroup', 'fillGroup', 'edgesGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     eraser:  [],
     select:  [],
     hand:    []
@@ -3889,13 +3949,36 @@ class UIManager {
    * object if there is one, otherwise the active drawing tool. Selecting
    * something opens the panel, as it does in the tools this follows.
    */
+  static activeTab = 'stroke';
+
   static updateProperties({ open = false } = {}) {
     const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
     const kind = selected ? selected.type : state.tool;
     const groups = this.PROPERTY_GROUPS[kind] || this.PROPERTY_GROUPS.pen;
 
+    // Which tabs have anything to show for this kind of object.
+    const tabsWithContent = new Set();
     document.querySelectorAll('.prop-group').forEach((group) => {
-      group.classList.toggle('hidden', !groups.includes(group.id));
+      if (groups.includes(group.id)) tabsWithContent.add(group.dataset.tab);
+    });
+
+    // Fall back to a tab that has something in it.
+    if (!tabsWithContent.has(this.activeTab)) {
+      this.activeTab = tabsWithContent.has('stroke') ? 'stroke' : 'background';
+    }
+
+    document.querySelectorAll('.prop-group').forEach((group) => {
+      const applies = groups.includes(group.id);
+      const tab = group.dataset.tab;
+      // 'common' groups — opacity and layers — show under either tab.
+      const onTab = tab === 'common' || tab === this.activeTab;
+      group.classList.toggle('hidden', !(applies && onTab));
+    });
+
+    document.querySelectorAll('.prop-tab').forEach((btn) => {
+      const tab = btn.dataset.tab;
+      btn.classList.toggle('active', tab === this.activeTab);
+      btn.classList.toggle('hidden', !tabsWithContent.has(tab));
     });
 
     // With nothing to configure, leave the panel alone entirely.
@@ -3964,6 +4047,7 @@ class UIManager {
   }
 
   static showSetup() {
+    if (ui.slideIconContainer) ui.slideIconContainer.classList.add('hidden');
     ui.setup.classList.remove('hidden');
     ui.loading.classList.add('hidden');
     ui.toolbar.classList.add('hidden');
@@ -4588,6 +4672,10 @@ if (!window.__WB_EVENTS_BOUND__) {
         // An image is a first-class object: it can sit on a coloured panel,
         // carry a caption and be connected by arrows, like any other shape.
         backgroundColor: 'transparent',
+        color: state.strokeColor || '#1e1e1e',
+        size: 0,               // no frame until one is chosen
+        strokeStyle: state.strokeStyle || 'solid',
+        sloppiness: state.sloppiness ?? 0,
         fillStyle: state.fillStyle || 'solid',
         edges: state.edges || 'round',
         opacity: state.strokeOpacity ?? 1,
@@ -4907,6 +4995,16 @@ if (!window.__WB_EVENTS_BOUND__) {
     input.click();
   }
 
+
+  // Clicking anywhere that is not the panel or its button closes it. It used
+  // to stay open across rooms and sessions, covering the board.
+  document.addEventListener('pointerdown', (e) => {
+    const panel = ui.slideIconContainer;
+    if (!panel || panel.classList.contains('hidden')) return;
+    if (panel.contains(e.target)) return;
+    if (ui.slideIconBtn && ui.slideIconBtn.contains(e.target)) return;
+    panel.classList.add('hidden');
+  });
 
   ui.slideIconBtn.addEventListener('click', async (e) => {
     e.stopPropagation();

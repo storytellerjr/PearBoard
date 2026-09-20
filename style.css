@@ -1474,3 +1474,63 @@ input[type="range"]::-ms-fill-upper {
   box-sizing: border-box;
   caret-color: #1e1e1e;
 }
+
+/* Stroke / Background tabs */
+.prop-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 2px 10px;
+}
+
+.prop-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b6b75;
+  background: #f1f0f4;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prop-tab:hover {
+  background: #e7e5ec;
+}
+
+.prop-tab.active {
+  background: #e0dfff;
+  color: #1b1b3a;
+}
+
+/* ---- Toolbar: stay reachable on a small window ---------------------------
+   The tool buttons sat in a fixed row that ran off the bottom of a short
+   window, so on a small canvas the toolbar looked like it had vanished. */
+
+.btn--container {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 4px;
+  overflow-x: auto;
+  z-index: 1200;
+}
+
+@media (max-height: 620px) {
+  .btn--container {
+    bottom: 6px;
+    padding: 4px 6px;
+  }
+  .btn--container .btn {
+    width: 30px;
+    height: 30px;
+  }
+}

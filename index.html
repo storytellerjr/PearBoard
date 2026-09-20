@@ -80,7 +80,12 @@
     </button>
 
     <div class="controls-container" id="controlsContainer">
-      <div class="prop-group" id="colorGroup">
+      <div class="prop-tabs" role="tablist">
+        <button type="button" class="prop-tab active" data-tab="stroke" role="tab">Stroke</button>
+        <button type="button" class="prop-tab" data-tab="background" role="tab">Background</button>
+      </div>
+
+      <div class="prop-group" id="colorGroup" data-tab="stroke">
         <label class="prop-label">Stroke</label>
         <div class="swatch-row">
           <button type="button" class="swatch" data-color="#1e1e1e" style="--swatch:#1e1e1e" title="Black"></button>
@@ -95,7 +100,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="backgroundGroup">
+      <div class="prop-group" id="backgroundGroup" data-tab="background">
         <label class="prop-label">Background</label>
         <div class="swatch-row">
           <button type="button" class="swatch swatch-transparent" data-bg="transparent" title="Transparent"></button>
@@ -110,7 +115,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="fillGroup">
+      <div class="prop-group" id="fillGroup" data-tab="background">
         <label class="prop-label">Fill</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-fill="hachure" title="Hachure">
@@ -125,7 +130,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="widthGroup">
+      <div class="prop-group" id="widthGroup" data-tab="stroke">
         <label class="prop-label">Stroke width</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-width="1" title="Thin">
@@ -140,7 +145,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="pressureGroup">
+      <div class="prop-group" id="pressureGroup" data-tab="stroke">
         <label class="prop-label">Pressure</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-pressure="variable" title="Variable">
@@ -152,7 +157,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="styleGroup">
+      <div class="prop-group" id="styleGroup" data-tab="stroke">
         <label class="prop-label">Stroke style</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-style="solid" title="Solid">
@@ -167,7 +172,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="sloppinessGroup">
+      <div class="prop-group" id="sloppinessGroup" data-tab="stroke">
         <label class="prop-label">Sloppiness</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-sloppiness="0" title="Architect">
@@ -182,7 +187,7 @@
         </div>
       </div>
 
-      <div class="prop-group hidden" id="arrowTypeGroup">
+      <div class="prop-group hidden" id="arrowTypeGroup" data-tab="stroke">
         <label class="prop-label">Arrow type</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-arrow="straight" title="Straight">
@@ -197,7 +202,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="fontFamilyGroup">
+      <div class="prop-group" id="fontFamilyGroup" data-tab="stroke">
         <label class="prop-label">Font family</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-font="hand" title="Hand-drawn">
@@ -212,7 +217,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="fontSizeGroup">
+      <div class="prop-group" id="fontSizeGroup" data-tab="stroke">
         <label class="prop-label">Font size</label>
         <div class="prop-row">
           <button type="button" class="prop-btn prop-btn-text" data-size="16" title="Small">S</button>
@@ -222,7 +227,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="textAlignGroup">
+      <div class="prop-group" id="textAlignGroup" data-tab="stroke">
         <label class="prop-label">Text align</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-align="left" title="Left">
@@ -237,7 +242,7 @@
         </div>
       </div>
 
-      <div class="prop-group" id="edgesGroup">
+      <div class="prop-group" id="edgesGroup" data-tab="background">
         <label class="prop-label">Edges</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-edges="sharp" title="Sharp">
@@ -255,13 +260,13 @@
         </div>
       </div>
 
-      <div class="prop-group" id="opacityGroup">
+      <div class="prop-group" id="opacityGroup" data-tab="common">
         <label class="prop-label">Opacity</label>
         <input type="range" id="opacity-control" min="0" max="100" step="5" value="100" />
         <div class="slider-scale"><span>0</span><span id="opacity-text">100</span></div>
       </div>
 
-      <div class="prop-group" id="layersGroup">
+      <div class="prop-group" id="layersGroup" data-tab="common">
         <label class="prop-label">Layers</label>
         <div class="prop-row">
           <button type="button" class="prop-btn" data-layer="back" title="Send to back">
