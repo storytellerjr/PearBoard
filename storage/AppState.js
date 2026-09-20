@@ -78,11 +78,25 @@ export const state = {
   dragStart: null,
   dragInitialPos: null,
 
+  /**
+   * Called after every document change. Set by the app at startup so that
+   * auto-save can hook in without this module having to import it — keeping
+   * AppState dependency-free and free of import cycles.
+   */
+  onChange: null,
+
   /** Mark the document as changed, so peers and snapshots see a new revision. */
   bumpDoc () {
     if (!this.doc) this.doc = emptyDoc()
     this.doc.version = (this.doc.version || 0) + 1
     this.dirty = true
+    if (typeof this.onChange === 'function') {
+      try {
+        this.onChange()
+      } catch (err) {
+        console.error('state.onChange failed:', err)
+      }
+    }
   },
 
   /**

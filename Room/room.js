@@ -104,6 +104,60 @@ export class Room {
     }
 
 
+    /**
+     * Auto-save slot: one per room, overwritten each time.
+     *
+     * Deliberately separate from `states[]`, which holds the snapshots the
+     * user saved by hand. Appending an auto-save to that list every couple of
+     * seconds would bury the named snapshots and grow the record without
+     * bound. No thumbnail either — it is never shown in the snapshot list.
+     */
+    async saveAutoState(roomKey) {
+        if (!roomKey) return null;
+        await this.ensureStorage();
+
+        let room = await this.getRoom(roomKey);
+        if (!room) {
+            room = {
+                roomKey,
+                roomName: roomKey,
+                createdBy: state.localPeerId,
+                states: [],
+                createdAt: Date.now()
+            };
+        }
+
+        const autoState = {
+            version: state.doc.version,
+            order: [...state.doc.order],
+            objects: {...state.doc.objects},
+            savedAt: Date.now(),
+            savedBy: state.localPeerId,
+            roomKey
+        };
+
+        await roomDB.put(roomKey, {...room, autoState, lastModified: Date.now()});
+        return autoState;
+    }
+
+    /**
+     * The board to show when rejoining a room: the auto-save if there is one,
+     * otherwise the most recent hand-saved snapshot.
+     */
+    async getAutoState(roomKey) {
+        if (!roomKey) return null;
+        await this.ensureStorage();
+
+        const room = await this.getRoom(roomKey);
+        if (!room) return null;
+
+        if (room.autoState) return room.autoState;
+        if (Array.isArray(room.states) && room.states.length > 0) {
+            return room.states[room.states.length - 1];
+        }
+        return null;
+    }
+
     async deleteState(roomKey, index) {
         try {
             await this.ensureStorage();

@@ -8,6 +8,22 @@ import {globalState} from "./storage/GlobalState.js";
 import { state } from './storage/AppState.js'
 export const PEAR_PATH = Pear.config.storage
 
+/**
+ * Build stamp — shown in red, top-left, so it is always obvious which build
+ * of the app a window is running. Updated on every code change.
+ */
+export const BUILD_STAMP = 'build 12:06:57'
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Dev builds only: makes it obvious at a glance which build a window is
+  // running, which matters when several windows are open during development.
+  if (!Pear.config.dev) return
+  const el = document.createElement('div')
+  el.id = 'build-stamp'
+  el.textContent = BUILD_STAMP
+  document.body.appendChild(el)
+}, { once: true })
+
 // ============================================================================
 // CONSTANTS & CONFIGURATION
 // ============================================================================
@@ -641,9 +657,48 @@ class ObjectRenderer {
       case 'text':
         this.renderText(obj);
         break;
+      case 'image':
+        this.renderImage(obj);
+        break;
     }
 
     state.ctx.restore();
+  }
+
+  /**
+   * Images from the icon library. Canvas drawing is synchronous but image
+   * loading is not, so each source is cached; the first miss kicks off a load
+   * and asks for a repaint once it arrives.
+   */
+  static renderImage(obj) {
+    if (!obj.src) return;
+
+    if (!CanvasManager._imageCache) CanvasManager._imageCache = new Map();
+    const cache = CanvasManager._imageCache;
+
+    let entry = cache.get(obj.src);
+    if (!entry) {
+      const img = new Image();
+      entry = { img, loaded: false };
+      cache.set(obj.src, entry);
+      img.onload = () => {
+        entry.loaded = true;
+        state.requestRender();
+      };
+      img.onerror = () => {
+        entry.failed = true;
+        console.warn('Image failed to load:', obj.src);
+      };
+      img.src = obj.src;
+    }
+
+    if (!entry.loaded) return;
+
+    const w = obj.w || entry.img.width;
+    const h = obj.h || entry.img.height;
+    state.ctx.globalAlpha = typeof obj.opacity === 'number' ? obj.opacity : 1;
+    state.ctx.drawImage(entry.img, obj.x, obj.y, w, h);
+    state.ctx.globalAlpha = 1;
   }
 
   static renderPath(obj) {
@@ -1074,7 +1129,6 @@ class TextEditor {
   static createEditorElement(x, y, textObj, fontPixels, initialText) {
     const div = document.createElement('textarea');
     div.className = 'text-editor';
-    div.contentEditable = 'true';
     div.dataset.id = textObj.id;
     div.spellcheck = false;
 
@@ -1103,7 +1157,7 @@ class TextEditor {
     });
 
     if (initialText) {
-      div.textContent = initialText;
+      div.value = initialText;
     }
 
     this.attachEditorEventListeners(div);
@@ -1149,8 +1203,15 @@ class TextEditor {
       return;
     }
 
-    // Read and trim the textContent safely
-    const text = editorDiv.textContent ? editorDiv.textContent.trim() : '';
+    // The editor is a <textarea>, so typed input lands in .value while
+    // .textContent stays empty. The original read only .textContent, so every
+    // commit looked blank and deleted the object the user had just typed into.
+    // Prefer whichever field actually holds text, so this survives either.
+    const fromValue = typeof editorDiv.value === 'string' ? editorDiv.value : '';
+    const fromText = editorDiv.textContent || '';
+    const raw = fromValue.trim() !== '' ? fromValue : fromText;
+    const text = raw.trim();
+
 
     if (text === '') {
       // Delete empty text object
@@ -2149,6 +2210,25 @@ class UIManager {
     }
   }
 
+  /** Brief, unobtrusive confirmation that work is on disk. */
+  static showSaveStatus(message, isError = false) {
+    let el = document.querySelector('#save-status');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'save-status';
+      document.body.appendChild(el);
+    }
+
+    el.textContent = message;
+    el.classList.toggle('error', isError);
+    el.classList.add('visible');
+
+    clearTimeout(this._saveStatusTimer);
+    this._saveStatusTimer = setTimeout(() => {
+      el.classList.remove('visible');
+    }, 1600);
+  }
+
   static showSetup() {
     ui.setup.classList.remove('hidden');
     ui.loading.classList.add('hidden');
@@ -2189,6 +2269,14 @@ class SessionManager {
     ui.topicOut.textContent = topicHex
 
     try {
+      // Bring back whatever this room had, before showing it. Peers may
+      // still send a newer document; applySnapshot ignores older versions.
+      const saved = await room.getAutoState(topicHex);
+      if (saved) {
+        NetworkManager.applySnapshot(saved);
+        console.log('Restored board from', new Date(saved.savedAt).toLocaleString());
+      }
+
       await NetworkManager.initSwarm(topicHex);
       UIManager.showWorkspace();
       CanvasManager.resizeCanvas();
@@ -2196,6 +2284,66 @@ class SessionManager {
       console.error('Failed to start networking:', error);
       alert('Failed to start networking');
       window.location.reload();
+    }
+  }
+}
+
+// ============================================================================
+// AUTO-SAVE
+// ============================================================================
+
+/**
+ * Keeps the board on disk without the user thinking about it.
+ *
+ * Writes are debounced: a burst of strokes produces one snapshot rather than
+ * one per stroke. Hand-saved snapshots are untouched — this uses its own slot.
+ */
+export class AutoSave {
+  static DELAY = 1500;
+  static _timer = null;
+  static _saving = false;
+  static _again = false;
+
+  /** Hook into document changes. Called once at startup. */
+  static install() {
+    state.onChange = () => this.schedule();
+
+    // Best effort on the way out: the debounce may not have fired yet.
+    window.addEventListener('beforeunload', () => { this.flush(); });
+    window.addEventListener('pagehide', () => { this.flush(); });
+  }
+
+  static schedule() {
+    if (!state.topicKey) return;
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this.flush(), this.DELAY);
+  }
+
+  static async flush() {
+    if (!state.topicKey) return;
+
+    clearTimeout(this._timer);
+    this._timer = null;
+
+    // A save already in flight: remember that more changes arrived.
+    if (this._saving) {
+      this._again = true;
+      return;
+    }
+
+    this._saving = true;
+    try {
+      await room.saveAutoState(state.topicKey);
+      UIManager.showSaveStatus('Saved');
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+      UIManager.showSaveStatus('Save failed', true);
+    } finally {
+      this._saving = false;
+      if (this._again) {
+        this._again = false;
+        this.schedule();
+      }
     }
   }
 }
@@ -2554,6 +2702,8 @@ class WhiteboardApp {
     state.strokeColor = ui.color.value;
     state.strokeSize = parseInt(ui.size.value, 10);
 
+    AutoSave.install();
+
     UIManager.showSetup();
   }
 }
@@ -2672,6 +2822,111 @@ if (!window.__WB_EVENTS_BOUND__) {
     await displayStates(states)
   })
 
+  /**
+   * Place an icon on the board, centred on the given world coordinates.
+   * The image is loaded first so its natural size is known.
+   */
+  function insertIconAt(iconPath, worldX, worldY) {
+    const img = new Image();
+    img.onload = () => {
+      // The icon art is large (768x1344) and portrait. Scale the longest side
+      // down to a sensible size on the board, keeping the proportions, so a
+      // dropped icon is not enormous and is never distorted.
+      const MAX_SIDE = 180;
+      const longest = Math.max(img.width, img.height) || 1;
+      const scale = Math.min(1, MAX_SIDE / longest);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+
+      const iconObj = {
+        id: state.generateRandomId(),
+        type: 'image',
+        x: worldX - w / 2,
+        y: worldY - h / 2,
+        w,
+        h,
+        src: iconPath,
+        createdBy: state.localPeerId,
+        rev: 0
+      };
+      DocumentManager.addObject(iconObj, true);
+      state.requestRender();
+    };
+    img.onerror = () => console.warn('Could not load icon:', iconPath);
+    img.src = iconPath;
+  }
+
+  /**
+   * Pointer-based dragging for the icon library.
+   *
+   * HTML5 drag-and-drop is unreliable inside an Electron renderer, and the
+   * <img> in each row starts its own native image drag that swallows ours.
+   * Tracking the pointer directly avoids both problems and behaves the same
+   * on a trackpad, a mouse and a touchscreen.
+   */
+  const iconDrag = {
+    path: null,
+    ghost: null,
+
+    start (iconPath, event) {
+      this.path = iconPath;
+
+      const ghost = document.createElement('img');
+      ghost.src = iconPath;
+      ghost.className = 'icon-drag-ghost';
+      document.body.appendChild(ghost);
+      this.ghost = ghost;
+
+      this.move(event);
+      ui.canvas.classList.add('drop-target');
+
+      window.addEventListener('pointermove', this._onMove);
+      window.addEventListener('pointerup', this._onUp);
+      window.addEventListener('pointercancel', this._onCancel);
+    },
+
+    move (event) {
+      if (!this.ghost) return;
+      this.ghost.style.left = `${event.clientX}px`;
+      this.ghost.style.top = `${event.clientY}px`;
+    },
+
+    finish (event) {
+      const iconPath = this.path;
+      this.cleanup();
+      if (!iconPath) return;
+
+      const rect = ui.canvas.getBoundingClientRect();
+      const inside =
+        event.clientX >= rect.left && event.clientX <= rect.right &&
+        event.clientY >= rect.top && event.clientY <= rect.bottom;
+
+      if (!inside) return;
+
+      const world = CoordinateUtils.screenToWorld(
+        event.clientX - rect.left,
+        event.clientY - rect.top
+      );
+      insertIconAt(iconPath, world.x, world.y);
+    },
+
+    cleanup () {
+      this.path = null;
+      if (this.ghost) {
+        this.ghost.remove();
+        this.ghost = null;
+      }
+      ui.canvas.classList.remove('drop-target');
+      window.removeEventListener('pointermove', this._onMove);
+      window.removeEventListener('pointerup', this._onUp);
+      window.removeEventListener('pointercancel', this._onCancel);
+    }
+  };
+
+  iconDrag._onMove = (e) => iconDrag.move(e);
+  iconDrag._onUp = (e) => iconDrag.finish(e);
+  iconDrag._onCancel = () => iconDrag.cleanup();
+
   async function displayIcons() {
     const imageFiles = await loadIcons();
 
@@ -2726,7 +2981,7 @@ if (!window.__WB_EVENTS_BOUND__) {
 
       iconItem.innerHTML = `
       <div class="icon-info" data-index="${index}">
-        <img class="icon-thumbnail" src="${iconPath}" alt="Icon preview">
+        <img class="icon-thumbnail" src="${iconPath}" alt="${iconFile}" title="${iconFile}">
         <div class="icon-details">
           <h5 class="icon-name">${iconFile}</h5>
           <p class="icon-type">Icon</p>
@@ -2735,23 +2990,23 @@ if (!window.__WB_EVENTS_BOUND__) {
     `;
 
       // Add click handler to select icon
+      // Drag an icon onto the canvas and it lands where you drop it.
+      // The native image drag is turned off so it cannot hijack the gesture.
+      const thumb = iconItem.querySelector('.icon-thumbnail');
+      if (thumb) thumb.draggable = false;
+      iconItem.draggable = false;
+
+      iconItem.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        iconDrag.start(iconPath, e);
+      });
+
+      // Click still works, dropping the icon in the middle of the view.
       iconItem.addEventListener('click', () => {
-        const img = new Image();
-        img.onload = () => {
-          const iconObj = {
-            id: state.generateRandomId(),
-            type: 'image',
-            x: 100,
-            y: 100,
-            w: img.width,
-            h: img.height,
-            src: iconPath,
-            createdBy: state.localPeerId,
-            rev: 0
-          };
-          DocumentManager.addObject(iconObj, true);
-        };
-        img.src = iconPath;
+        const rect = ui.canvas.getBoundingClientRect();
+        const centre = CoordinateUtils.screenToWorld(rect.width / 2, rect.height / 2);
+        insertIconAt(iconPath, centre.x, centre.y);
       });
 
       iconsList.appendChild(iconItem);
@@ -2763,6 +3018,7 @@ if (!window.__WB_EVENTS_BOUND__) {
     contentWrapper.appendChild(iconsList);
 
     // Clear and populate container
+    ui.slideIconContainer.innerHTML = '';
     ui.slideIconContainer.appendChild(containerHeader);
     ui.slideIconContainer.appendChild(contentWrapper);
   }

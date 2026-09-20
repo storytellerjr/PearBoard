@@ -759,3 +759,363 @@ input[type="range"]::-ms-fill-upper {
   background: #ccc; /* track upper color */
   border-radius: 4px;
 }
+/* Icon drag-and-drop */
+.icon-item {
+  cursor: grab;
+}
+
+.icon-item:active {
+  cursor: grabbing;
+}
+
+#board.drop-target {
+  outline: 2px dashed rgba(59, 130, 246, 0.8);
+  outline-offset: -4px;
+}
+
+/* Auto-save status */
+#save-status {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(31, 36, 48, 0.92);
+  color: #e8ecf1;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 10000;
+}
+
+#save-status.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#save-status.error {
+  background: rgba(190, 45, 45, 0.95);
+}
+
+/* Icon drag ghost — follows the pointer while dragging from the library */
+.icon-drag-ghost {
+  position: fixed;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.85;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  z-index: 10001;
+}
+
+/* Build stamp — which build is this window running? */
+#build-stamp {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #d92020;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  z-index: 100000;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon library panel
+
+   These elements had no styling: displayIcons() always threw, so the markup
+   never reached the page and nobody saw it. The container was a grid sized for
+   the bare <img> elements the old loadIcons() injected, and the thumbnails had
+   no size limit, so each icon rendered at its natural size.
+   --------------------------------------------------------------------------- */
+
+#slide-icon-container {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+  gap: 0;
+  padding: 0;
+  width: 320px;
+  max-width: 36vw;
+  overflow: hidden;
+}
+
+.icons-container-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+}
+
+.icons-container-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.slide-icon-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: #555;
+}
+
+.slide-icon-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.icons-content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.icons-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The row wrapper — the old max-width rule was written for the <img> itself. */
+.icon-item {
+  width: auto;
+  max-width: none;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #fff;
+  cursor: grab;
+  user-select: none;
+}
+
+.icon-item:active {
+  cursor: grabbing;
+}
+
+.icon-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.icon-thumbnail {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  display: block;
+}
+
+.icon-details {
+  width: 100%;
+  text-align: center;
+}
+
+.icon-name {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-type {
+  display: none;
+}
+
+/* The icon art is portrait (768x1344), so give the thumbnail a matching box
+   rather than a square one — contain then letterboxes far less. */
+.icon-thumbnail {
+  width: 100%;
+  max-width: 56px;
+  height: 84px;
+  object-fit: contain;
+}
+
+.icons-list {
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+}
+
+/* Tighter icon tiles — let the artwork fill the cell instead of floating in a
+   white box. Card chrome only appears on hover. */
+.icons-content-wrapper {
+  padding: 8px;
+}
+
+.icons-list {
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 4px;
+}
+
+.icon-item {
+  padding: 2px;
+  gap: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+}
+
+.icon-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  transform: none;
+  box-shadow: none;
+}
+
+.icon-info {
+  gap: 0;
+}
+
+.icon-thumbnail {
+  width: 100%;
+  max-width: none;
+  height: 78px;
+  object-fit: contain;
+}
+
+.icon-name {
+  font-size: 9px;
+  line-height: 1.2;
+  color: #666;
+  margin: 1px 0 0;
+}
+
+/* Drop the filename labels and give the artwork the space instead — the name
+   is still available as a tooltip on hover. */
+.icon-details {
+  display: none;
+}
+
+.icons-list {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+.icon-item {
+  padding: 2px;
+}
+
+.icon-thumbnail {
+  height: 120px;
+}
+
+/* Strip the nested padding: panel -> scroll wrapper -> tile -> image. Each
+   layer was adding its own inset, so the artwork ended up boxed twice. */
+.icons-content-wrapper {
+  padding: 4px;
+}
+
+.icon-item {
+  padding: 0;
+  border-radius: 4px;
+}
+
+.icon-info {
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.icons-list {
+  gap: 3px;
+}
+
+.icon-thumbnail {
+  width: 100%;
+  height: 130px;
+  display: block;
+}
+
+/* Match the box to the artwork instead of guessing a height: with the same
+   aspect ratio as the source (768x1344) there is no letterboxing inside the
+   image box at all. line-height:0 removes the inline baseline gap under it. */
+.icon-item {
+  line-height: 0;
+  justify-content: flex-start;
+}
+
+.icon-info {
+  line-height: 0;
+  display: block;
+}
+
+.icon-thumbnail {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 768 / 1344;
+  object-fit: contain;
+  display: block;
+  margin: 0;
+}
+
+/* Tighter still — artwork edge to edge, separated only by a hairline gap. */
+.icons-content-wrapper {
+  padding: 2px;
+}
+
+.icons-list {
+  gap: 1px;
+}
+
+.icon-item {
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 2px;
+}
+
+.icon-item:hover {
+  border: none;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.icons-container-header {
+  padding: 8px 10px;
+}
+
+/* Grid items stretch to the row height by default, so each tile ran on below
+   its image — invisible until hover lit it up. Make the tile hug its content. */
+.icon-item {
+  align-self: start;
+  height: fit-content;
+  overflow: hidden;
+}
+
+.icons-list {
+  align-items: start;
+}
+
+/* Size rows to their content, so no leftover band appears between rows. */
+.icons-list {
+  grid-auto-rows: max-content;
+  row-gap: 1px;
+  column-gap: 1px;
+  align-content: start;
+}

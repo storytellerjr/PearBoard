@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 export function addAlphaToColor(hex, alpha) {
+    // Not every object carries a colour (images do not). Returning a safe
+    // default here keeps one colourless object from throwing inside the
+    // render loop and blanking the whole canvas.
+    if (typeof hex !== 'string' || hex === '') return '#000000';
     if (!hex.startsWith('#')) return hex;
     const v = hex.slice(1);
     const r = parseInt(v.slice(0,2),16);
@@ -38,43 +42,37 @@ document.querySelector('.slide-state-btn').addEventListener('click', () => {
 //     document.querySelector('#state-details-container').classList.toggle('hidden');
 // })
 
+/**
+ * List the icon files available to the board.
+ *
+ * Returns a promise for the filenames and nothing else. It previously also
+ * rendered its own <img> elements into the icon container and returned
+ * undefined (its `return` sat inside the fs.readdir callback). Callers await
+ * it and read `.length`, so the undefined return threw immediately and the
+ * real icon list — with its click and drag handlers — was never built. The
+ * icons on screen were these stray images, whose only handler logged a line.
+ *
+ * Rendering belongs to displayIcons() in app.js; this just reads the folder.
+ */
 export default function loadIcons() {
     const imgDir = './assets/board_icons';
-    const iconContainer = document.querySelector('#slide-icon-container');
 
-    if (!iconContainer) {
-        console.error('Icon container not found');
-        return [];
-    }
+    return new Promise((resolve) => {
+        fs.readdir(imgDir, (err, files) => {
+            if (err) {
+                console.error('Unable to scan icon directory:', err);
+                resolve([]);
+                return;
+            }
 
-    fs.readdir(imgDir, (err, files) => {
-        if (err) {
-            console.error('Unable to scan directory:', err);
-            return;
-        }
-
-        const imageFiles = files.filter(file => {
-            const ext = path.extname(file).toLowerCase();
-            return ['.jpg', '.jpeg', '.png', '.gif'].includes(ext);
-        });
-
-        imageFiles.forEach(image => {
-            const img = document.createElement('img');
-            img.src = `${imgDir}/${image}`;
-            img.alt = image;
-            img.title = image;
-            img.className = 'icon-item'; // Add a class for styling
-            img.style.cursor = 'pointer';
-
-            img.addEventListener('click', () => {
-                console.log(`Selected icon: ${image}`);
+            const imageFiles = files.filter(file => {
+                const ext = path.extname(file).toLowerCase();
+                return ['.jpg', '.jpeg', '.png', '.gif'].includes(ext);
             });
 
-            iconContainer.appendChild(img);
+            console.log(`Loaded ${imageFiles.length} icons`);
+            resolve(imageFiles);
         });
-
-        console.log(`Loaded ${imageFiles.length} icons`);
-        return imageFiles;
     });
 }
 

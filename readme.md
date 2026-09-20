@@ -107,7 +107,36 @@ Development continues from `UI/improvingUI`, the branch he was working on when h
 
 As required by Apache-2.0 §4(b), significant changes are recorded here.
 
-- **Sep 2026** — Added the `LICENSE` and `NOTICE` files that the original project never had; resolved the original's contradictory licence declaration (see below). Repository moved to a new home under active maintenance.
+#### September 2026 — the app runs again
+
+The project could not start from a clean clone. `storage/` was listed in `.gitignore`, so the two modules `app.js` imports on its first lines were never committed. The imports failed, `app.js` never executed, and no event listener was ever attached — the setup screen rendered and no button did anything. Fixing that uncovered a series of features that had been built but never wired up.
+
+**Made it start**
+- Reconstructed `storage/AppState.js` and `storage/GlobalState.js` from their call sites, and removed `storage/` from `.gitignore` so it cannot happen again
+- Corestore is now created once and shared, rather than a second instance fighting the first over Hypercore's file locks
+
+**Text that stays put**
+- Committing a text object read `.textContent` from a `<textarea>`, where typed input lives in `.value`. Every commit therefore saw an empty string and deleted the object the user had just typed into
+
+**Images on the board**
+- The renderer had no `case 'image'`, so inserted icons were added to the document and never drawn
+- A colourless object threw inside `addAlphaToColor()` and broke the render loop for *everything* — one icon would have stopped the whole canvas drawing
+- Icons scale to 180px on their longest side, keeping their proportions, instead of arriving at their full 768x1344
+
+**A working icon library**
+- `loadIcons()` returned `undefined` while rendering its own throwaway images into the panel. `displayIcons()` read `.length` on that undefined and threw, so the real list — with all its handlers — never ran. It now returns a promise for the filenames and leaves rendering to the caller
+- The panel is styled for the first time, and clears itself before repopulating instead of stacking duplicates
+
+**Drag and drop**
+- Icons are dragged onto the board and land where they are dropped, tracked with pointer events so it works with a mouse, a trackpad or a touchscreen
+
+**Work that survives closing the window**
+- Auto-save on a debounce after drawing stops, and on window close
+- Boards restore automatically when rejoining a room
+- Auto-saves use their own slot, so hand-saved snapshots are untouched
+
+**Licensing**
+- Added the `LICENSE` and `NOTICE` files the original never had, and resolved its contradictory licence declaration (see below)
 
 ## 📜 License
 
