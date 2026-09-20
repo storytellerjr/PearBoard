@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 16:12:20'
+export const BUILD_STAMP = 'build 16:46:41'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -3568,6 +3568,16 @@ class UIManager {
     ui.undo.addEventListener('click', () => HistoryManager.undo());
     ui.redo.addEventListener('click', () => HistoryManager.redo());
     ui.clear.addEventListener('click', () => DocumentManager.clearAll(true));
+    const leaveBtn = document.querySelector('#leave-room');
+    if (leaveBtn) {
+      leaveBtn.addEventListener('click', () => SessionManager.leaveRoom());
+    }
+
+    const exitBtn = document.querySelector('#exit-app');
+    if (exitBtn) {
+      exitBtn.addEventListener('click', () => SessionManager.exitApp());
+    }
+
     ui.save.addEventListener('click', () => this.saveCanvasAsPNG());
     ui.saveState.addEventListener('click', () => this.saveDrawingState());
   }
@@ -3951,6 +3961,21 @@ class UIManager {
    */
   static activeTab = 'stroke';
 
+  /** What the panel is editing, for its heading. */
+  static SETTINGS_TITLES = {
+    pen: 'Pen settings',
+    eraser: 'Eraser settings',
+    line: 'Line settings',
+    arrow: 'Arrow settings',
+    rect: 'Box settings',
+    ellipse: 'Circle settings',
+    diamond: 'Diamond settings',
+    text: 'Text settings',
+    image: 'Image settings',
+    hand: 'Settings',
+    select: 'Settings'
+  };
+
   static updateProperties({ open = false } = {}) {
     const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
     const kind = selected ? selected.type : state.tool;
@@ -3984,6 +4009,12 @@ class UIManager {
     // With nothing to configure, leave the panel alone entirely.
     const panel = document.querySelector('.drawing-controls');
     if (panel) panel.classList.toggle('hidden', groups.length === 0);
+
+    // Name what is being edited, so the heading is not stuck on one tool.
+    const heading = document.querySelector('#settings-title');
+    if (heading) {
+      heading.textContent = this.SETTINGS_TITLES[kind] || 'Settings';
+    }
 
     if (selected) this.syncPropertiesFrom(selected);
 
@@ -4076,6 +4107,66 @@ class UIManager {
 // ============================================================================
 
 class SessionManager {
+  /**
+   * Leave the current board and go back to the room list.
+   *
+   * Saves first, then tears the swarm down — a board left running would keep
+   * syncing a document the user can no longer see.
+   */
+  static async leaveRoom() {
+    if (!state.joined) return;
+
+    try {
+      await AutoSave.flush();
+    } catch (err) {
+      console.error('Could not save before leaving:', err);
+    }
+
+    try {
+      if (state.swarm) await state.swarm.destroy();
+    } catch (err) {
+      console.error('Could not close the swarm cleanly:', err);
+    }
+
+    state.swarm = null;
+    state.connections = new Set();
+    state.peerCursors = new Map();
+    state.peerNames = new Map();
+    state.peerCount = 1;
+    state.joined = false;
+    state.topicKey = null;
+    state.roomKey = null;
+    state.selectedId = null;
+    state.hoverId = null;
+
+    state.resetDoc();
+
+    UIManager.showSetup();
+    refreshRoomList();
+    state.requestRender();
+  }
+
+  /** Close PearBoard, saving whatever is on the board first. */
+  static async exitApp() {
+    try {
+      await AutoSave.flush();
+    } catch (err) {
+      console.error('Could not save before exiting:', err);
+    }
+
+    try {
+      if (state.swarm) await state.swarm.destroy();
+    } catch (err) {
+      /* closing anyway */
+    }
+
+    if (typeof Pear !== 'undefined' && typeof Pear.exit === 'function') {
+      Pear.exit();
+    } else {
+      window.close();
+    }
+  }
+
   static async startSession(topicHex) {
     if (state.joined) return;
 
@@ -4539,7 +4630,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 }, { once: true });
 
-function initializeRoomList() {
+/**
+ * Reload the room list from storage.
+ *
+ * Split out from initializeRoomList so returning to the board list can
+ * refresh it without attaching the click handler a second time.
+ */
+function refreshRoomList() {
   room.getAllRooms()
       .then(raw => {
         console.log('RAW ROOMS:', raw, typeof raw, Array.isArray(raw));
@@ -4557,6 +4654,11 @@ function initializeRoomList() {
         console.error('Error loading rooms:', err);
         renderRoomList([]);
       });
+
+}
+
+function initializeRoomList() {
+  refreshRoomList();
 
   ui.roomsList.addEventListener('click', event => {
     const li = event.target.closest('.room-list');

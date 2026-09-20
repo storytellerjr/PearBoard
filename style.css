@@ -1534,3 +1534,18 @@ input[type="range"]::-ms-fill-upper {
     height: 30px;
   }
 }
+
+/* Boards / Exit buttons in the board menu */
+#leave-room .menu-icon,
+#exit-app .menu-icon {
+  flex: 0 0 auto;
+  color: #444;
+}
+
+#exit-app:hover {
+  color: #b02020;
+}
+
+#exit-app:hover .menu-icon {
+  color: #b02020;
+}
