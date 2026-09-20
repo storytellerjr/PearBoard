@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 13:35:09'
+export const BUILD_STAMP = 'build 13:49:31'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -780,6 +780,31 @@ class ObjectRenderer {
 
   static renderPath(obj) {
     const points = obj.points || [];
+
+    // A stroke drawn with pressure is thin where the pen lands and lifts, and
+    // full width through the middle. Drawn segment by segment, because canvas
+    // cannot vary lineWidth along a single path.
+    if (obj.pressure === 'variable' && points.length > 2) {
+      const ctx = state.ctx;
+      const base = obj.size || 2;
+      const n = points.length - 1;
+
+      for (let i = 0; i < n; i++) {
+        // Ramp up over the first fifth, down over the last.
+        const t = i / n;
+        const ramp = Math.min(1, t / 0.2, (1 - t) / 0.2);
+        ctx.lineWidth = base * (0.35 + 0.65 * ramp);
+
+        ctx.beginPath();
+        ctx.moveTo(points[i].x, points[i].y);
+        ctx.lineTo(points[i + 1].x, points[i + 1].y);
+        ctx.stroke();
+      }
+
+      ctx.lineWidth = base;
+      return;
+    }
+
     if (points.length < 2) return;
 
     if (obj.type === 'eraser') {
@@ -948,16 +973,37 @@ class ObjectRenderer {
     const bottom = [cx, obj.y + height];
     const left = [obj.x, cy];
 
+    const r = this.cornerRadius(obj, width, height) * 0.8;
+
+    const buildPath = () => {
+      if (r > 0) {
+        // arcTo rounds each point where two sides meet.
+        ctx.moveTo((top[0] + right[0]) / 2, (top[1] + right[1]) / 2);
+        ctx.arcTo(right[0], right[1], bottom[0], bottom[1], r);
+        ctx.arcTo(bottom[0], bottom[1], left[0], left[1], r);
+        ctx.arcTo(left[0], left[1], top[0], top[1], r);
+        ctx.arcTo(top[0], top[1], right[0], right[1], r);
+        ctx.closePath();
+      } else {
+        ctx.moveTo(top[0], top[1]);
+        ctx.lineTo(right[0], right[1]);
+        ctx.lineTo(bottom[0], bottom[1]);
+        ctx.lineTo(left[0], left[1]);
+        ctx.closePath();
+      }
+    };
+
     ctx.beginPath();
-    ctx.moveTo(top[0], top[1]);
-    ctx.lineTo(right[0], right[1]);
-    ctx.lineTo(bottom[0], bottom[1]);
-    ctx.lineTo(left[0], left[1]);
-    ctx.closePath();
+    buildPath();
     this.fillShape(obj);
 
     if (this.sloppyAmount(obj) === 0) {
       ctx.stroke();
+      return;
+    }
+
+    if (r > 0) {
+      this.strokeSloppy(obj, buildPath, { skipFill: true });
       return;
     }
 
@@ -1118,13 +1164,22 @@ class ObjectRenderer {
 
     const baseAlpha = ctx.globalAlpha;
 
+    // Rotate about the shape's own centre. ctx.rotate() turns the canvas
+    // around its origin, so rotating without recentring first swings a shape
+    // that sits far from 0,0 right across the board — which drew the second
+    // pass as a whole separate shape rather than a line gone over twice.
+    const b = GeometryUtils.getBounds(obj);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+
     passes.forEach((pass, index) => {
       const d = this.wobble(obj.id, pass.seed, amount);
       const tilt = this.wobble(obj.id, pass.seed + 10, amount).x * 0.0016;
 
       ctx.save();
-      ctx.translate(d.x, d.y);
+      ctx.translate(cx + d.x, cy + d.y);
       ctx.rotate(tilt);
+      ctx.translate(-cx, -cy);
 
       ctx.beginPath();
       buildPath();
@@ -1514,6 +1569,8 @@ class DrawingTools {
       points: [{ x, y }],
       color: state.strokeColor,
       size: state.strokeSize,
+      // Recorded on the stroke so it renders the same for everyone later.
+      pressure: state.pressure || 'variable',
       opacity: state.strokeOpacity ?? 1,
       createdBy: state.localPeerId,
       rev: 0
@@ -3191,6 +3248,19 @@ class UIManager {
       setActive(arrowRow, (b) => b.dataset.arrow === state.arrowType);
     }
 
+    // ---- pressure --------------------------------------------------------
+    const pressureRow = document.querySelector('#pressureGroup .prop-row');
+    if (pressureRow) {
+      pressureRow.querySelectorAll('.prop-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.pressure = btn.dataset.pressure;
+          setActive(pressureRow, (b) => b.dataset.pressure === btn.dataset.pressure);
+          applyToSelection({ pressure: btn.dataset.pressure });
+        });
+      });
+      setActive(pressureRow, (b) => b.dataset.pressure === state.pressure);
+    }
+
     // ---- font family -----------------------------------------------------
     const fontRow = document.querySelector('#fontFamilyGroup .prop-row');
     if (fontRow) {
@@ -3269,12 +3339,12 @@ class UIManager {
    * produce. Anything not listed falls back to the common set.
    */
   static PROPERTY_GROUPS = {
-    pen:     ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
+    pen:     ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'pressureGroup', 'opacityGroup', 'layersGroup'],
     line:    ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
     arrow:   ['colorGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'arrowTypeGroup', 'opacityGroup', 'layersGroup'],
     rect:    ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'opacityGroup', 'layersGroup'],
     ellipse: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
-    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'opacityGroup', 'layersGroup'],
+    diamond: ['colorGroup', 'backgroundGroup', 'fillGroup', 'widthGroup', 'styleGroup', 'sloppinessGroup', 'edgesGroup', 'opacityGroup', 'layersGroup'],
     text:    ['colorGroup', 'fontFamilyGroup', 'fontSizeGroup', 'textAlignGroup', 'opacityGroup', 'layersGroup'],
     image:   ['opacityGroup', 'layersGroup'],
     eraser:  [],
@@ -3328,6 +3398,7 @@ class UIManager {
     mark('#fontFamilyGroup .prop-btn', (b) => b.dataset.font === (obj.fontFamily || 'hand'));
     mark('#fontSizeGroup .prop-btn', (b) => parseInt(b.dataset.size, 10) === (obj.fontSize || 20));
     mark('#textAlignGroup .prop-btn', (b) => b.dataset.align === (obj.align || 'left'));
+    mark('#pressureGroup .prop-btn', (b) => b.dataset.pressure === (obj.pressure || 'variable'));
 
     const percent = Math.round((obj.opacity ?? 1) * 100);
     if (ui.opacitySlider) ui.opacitySlider.value = String(percent);

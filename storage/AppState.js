@@ -74,6 +74,7 @@ export const state = {
   fontFamily: 'hand',     // hand | normal | code
   fontSize: 20,           // S 16 | M 20 | L 28 | XL 36
   textAlign: 'center',    // left | center | right
+  pressure: 'variable',   // variable | uniform
   sloppiness: 2,          // 0 architect, 1 artist, 2 cartoonist
   arrowType: 'straight',  // straight | curved | elbow
   snapAnchors: null,      // anchors shown while drawing an arrow
