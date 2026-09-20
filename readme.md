@@ -45,6 +45,11 @@ or
 pear run -d .
 ```
 
+## 📖 User guide
+
+**[How to use PearBoard →](./USER_GUIDE.md)** — tools, arrows that attach to
+shapes, icon libraries, saving, and sharing a board with someone else.
+
 ## 🚀 Usage
 
 1. Run `npm run dev` to launch PearBoard locally.
