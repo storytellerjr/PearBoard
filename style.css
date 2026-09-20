@@ -1119,3 +1119,198 @@ input[type="range"]::-ms-fill-upper {
   column-gap: 1px;
   align-content: start;
 }
+
+/* ---- Icon libraries ------------------------------------------------------ */
+
+.library-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.library-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.library-add {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.library-add:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.library-description {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #666;
+}
+
+.library-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 6px;
+}
+
+.library-actions button {
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.library-actions button:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.library-delete {
+  color: #b02020;
+}
+
+.library-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.library-form input,
+.library-form textarea {
+  font-size: 12px;
+  padding: 5px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.library-form-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.library-form-actions button {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  cursor: pointer;
+}
+
+.library-create {
+  background: #2b6cb0;
+  color: #fff;
+  border-color: #2b6cb0;
+}
+
+.no-icons-message {
+  padding: 16px 10px;
+  font-size: 12px;
+  color: #777;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* The panel is a flex column; without min-height:0 the scrolling icon list
+   refuses to shrink and pushes the form's buttons out of view. */
+.icons-container-header,
+.library-bar,
+.library-form,
+.library-description,
+.library-actions {
+  flex: 0 0 auto;
+}
+
+.icons-content-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#slide-icon-container {
+  overflow-y: auto;
+}
+
+.library-form textarea {
+  min-height: 44px;
+  max-height: 120px;
+}
+
+/* ---- Library form: explicit button styling -------------------------------
+   The app's global `button, input, h4` rule sets display:flex with
+   space-between, and `.library-form-actions button` (0,1,1) outranks
+   `.library-create` (0,1,0) whatever the order. Both are pinned here with
+   matching specificity so the buttons render predictably. */
+
+.library-form .library-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.library-form .library-form-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 72px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.library-form .library-form-actions button.library-create {
+  background: #2b6cb0;
+  border: 1px solid #2b6cb0;
+  color: #ffffff;
+}
+
+.library-form .library-form-actions button.library-create:hover {
+  background: #255e9c;
+}
+
+.library-form .library-form-actions button.library-cancel {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  color: #444444;
+}
+
+/* A growing textarea was pushing the buttons out of the panel. Fix its height
+   and keep the actions in view. */
+.library-form textarea.library-desc-input {
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  resize: none;
+  overflow-y: auto;
+}
+
+.library-form input.library-name-input {
+  height: 30px;
+}

@@ -6,13 +6,28 @@ import {Room, room} from "./Room/room.js";
 
 import {globalState} from "./storage/GlobalState.js";
 import { state } from './storage/AppState.js'
+import { iconLibrary, importImageFile, BUILTIN_ID } from './storage/IconLibrary.js'
 export const PEAR_PATH = Pear.config.storage
 
 /**
  * Build stamp — shown in red, top-left, so it is always obvious which build
  * of the app a window is running. Updated on every code change.
  */
-export const BUILD_STAMP = 'build 12:06:57'
+/**
+ * True when the user is typing into a field.
+ *
+ * The app binds single-key shortcuts and swallows Space globally to stop the
+ * page scrolling. Without this check those handlers also fire while someone is
+ * typing, so a space could not be entered into any input on the board.
+ */
+export function isTypingTarget (target) {
+  if (!target) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+    target.isContentEditable === true
+}
+
+export const BUILD_STAMP = 'build 12:33:14'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -303,6 +318,7 @@ export class CanvasManager {
 
     // Add space + mouse drag handlers
     document.addEventListener('keydown', (e) => {
+      if (isTypingTarget(e.target)) return;
       if (e.code === 'Space' && !state.isSpacePressed) {
         state.isSpacePressed = true;
         ui.canvas.style.cursor = 'grab';
@@ -310,6 +326,7 @@ export class CanvasManager {
     });
 
     document.addEventListener('keyup', (e) => {
+      if (isTypingTarget(e.target)) return;
       if (e.code === 'Space') {
         state.isSpacePressed = false;
         ui.canvas.style.cursor = 'default';
@@ -350,8 +367,9 @@ export class CanvasManager {
       }
     });
 
-    // Prevent space from scrolling the page
+    // Prevent space from scrolling the page — but never while typing.
     window.addEventListener('keydown', (e) => {
+      if (isTypingTarget(e.target)) return;
       if (e.code === 'Space') {
         e.preventDefault();
       }
@@ -671,25 +689,51 @@ class ObjectRenderer {
    * and asks for a repaint once it arrives.
    */
   static renderImage(obj) {
-    if (!obj.src) return;
+    // Bundled icons carry a path; imported ones are referenced by library and
+    // icon id, and their bytes are fetched from the local library store.
+    const key = obj.src || (obj.libraryId && obj.iconId
+      ? `${obj.libraryId}/${obj.iconId}`
+      : null);
+    if (!key) return;
 
     if (!CanvasManager._imageCache) CanvasManager._imageCache = new Map();
     const cache = CanvasManager._imageCache;
 
-    let entry = cache.get(obj.src);
+    let entry = cache.get(key);
     if (!entry) {
       const img = new Image();
       entry = { img, loaded: false };
-      cache.set(obj.src, entry);
+      cache.set(key, entry);
+
       img.onload = () => {
         entry.loaded = true;
         state.requestRender();
       };
       img.onerror = () => {
         entry.failed = true;
-        console.warn('Image failed to load:', obj.src);
+        console.warn('Image failed to load:', key);
       };
-      img.src = obj.src;
+
+      if (obj.src) {
+        img.src = obj.src;
+      } else {
+        // Resolving from the library is asynchronous; the first frame misses
+        // and a repaint is requested once the bytes arrive.
+        iconLibrary.getIcon(obj.libraryId, obj.iconId)
+          .then((icon) => {
+            const source = icon && (icon.data || icon.src);
+            if (source) {
+              img.src = source;
+            } else {
+              entry.failed = true;
+              console.warn('Icon not found in library:', key);
+            }
+          })
+          .catch((err) => {
+            entry.failed = true;
+            console.error('Could not resolve icon', key, err);
+          });
+      }
     }
 
     if (!entry.loaded) return;
@@ -1412,6 +1456,8 @@ class InputHandler {
 
   static setupKeyboardHandlers() {
     window.addEventListener('keydown', (e) => {
+      // Single-key tool shortcuts must not fire while typing.
+      if (isTypingTarget(e.target)) return;
       const key = e.key.toLowerCase();
 
       // Undo/Redo
@@ -1444,6 +1490,7 @@ class InputHandler {
     });
 
     window.addEventListener('keyup', (e) => {
+      if (isTypingTarget(e.target)) return;
       if (e.code === 'Space') {
         state.spaceHeld = false;
       }
@@ -2826,7 +2873,7 @@ if (!window.__WB_EVENTS_BOUND__) {
    * Place an icon on the board, centred on the given world coordinates.
    * The image is loaded first so its natural size is known.
    */
-  function insertIconAt(iconPath, worldX, worldY) {
+  function insertIconAt(place, worldX, worldY) {
     const img = new Image();
     img.onload = () => {
       // The icon art is large (768x1344) and portrait. Scale the longest side
@@ -2845,15 +2892,19 @@ if (!window.__WB_EVENTS_BOUND__) {
         y: worldY - h / 2,
         w,
         h,
-        src: iconPath,
+        // Imported icons are referenced by id and resolved from the library at
+        // render time. Only the bundled set keeps a path, which every peer has.
+        libraryId: place.libraryId,
+        iconId: place.iconId,
+        src: place.libraryId === BUILTIN_ID ? place.source : undefined,
         createdBy: state.localPeerId,
         rev: 0
       };
       DocumentManager.addObject(iconObj, true);
       state.requestRender();
     };
-    img.onerror = () => console.warn('Could not load icon:', iconPath);
-    img.src = iconPath;
+    img.onerror = () => console.warn('Could not load icon:', place.iconId);
+    img.src = place.source;
   }
 
   /**
@@ -2865,14 +2916,14 @@ if (!window.__WB_EVENTS_BOUND__) {
    * on a trackpad, a mouse and a touchscreen.
    */
   const iconDrag = {
-    path: null,
+    place: null,
     ghost: null,
 
-    start (iconPath, event) {
-      this.path = iconPath;
+    start (place, event) {
+      this.place = place;
 
       const ghost = document.createElement('img');
-      ghost.src = iconPath;
+      ghost.src = place.source;
       ghost.className = 'icon-drag-ghost';
       document.body.appendChild(ghost);
       this.ghost = ghost;
@@ -2892,9 +2943,9 @@ if (!window.__WB_EVENTS_BOUND__) {
     },
 
     finish (event) {
-      const iconPath = this.path;
+      const place = this.place;
       this.cleanup();
-      if (!iconPath) return;
+      if (!place) return;
 
       const rect = ui.canvas.getBoundingClientRect();
       const inside =
@@ -2907,11 +2958,11 @@ if (!window.__WB_EVENTS_BOUND__) {
         event.clientX - rect.left,
         event.clientY - rect.top
       );
-      insertIconAt(iconPath, world.x, world.y);
+      insertIconAt(place, world.x, world.y);
     },
 
     cleanup () {
-      this.path = null;
+      this.place = null;
       if (this.ghost) {
         this.ghost.remove();
         this.ghost = null;
@@ -2927,101 +2978,230 @@ if (!window.__WB_EVENTS_BOUND__) {
   iconDrag._onUp = (e) => iconDrag.finish(e);
   iconDrag._onCancel = () => iconDrag.cleanup();
 
-  async function displayIcons() {
-    const imageFiles = await loadIcons();
+  /** Which library the panel is showing. */
+  let currentLibraryId = BUILTIN_ID;
 
+  async function displayIcons() {
+    // The button toggles the panel.
     if (!ui.slideIconContainer.classList.contains('hidden')) {
       ui.slideIconContainer.classList.add('hidden');
       return;
     }
 
     ui.slideIconContainer.classList.remove('hidden');
+    await renderIconPanel();
+  }
 
-    if (imageFiles.length === 0) {
-      const emptyContainer = document.createElement('div');
-      emptyContainer.className = 'empty-icons';
-      emptyContainer.innerHTML = `
-      <div class="icons-container-header">
-        <h3>Icons</h3>
-        <button class="slide-icon-close">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="no-icons-message">
-        <p>No icons available</p>
-      </div>
-    `;
+  async function renderIconPanel() {
+    const container = ui.slideIconContainer;
+    container.innerHTML = '';
 
-      const closeButton = emptyContainer.querySelector('.slide-icon-close');
-      closeButton.addEventListener('click', () => {
-        ui.slideIconContainer.classList.add('hidden');
-      });
-      return;
+    const libraries = await iconLibrary.listLibraries();
+    if (!libraries.some(l => l.id === currentLibraryId)) {
+      currentLibraryId = BUILTIN_ID;
     }
-    const containerHeader = document.createElement('div');
-    containerHeader.className = 'icons-container-header';
-    containerHeader.innerHTML = `
-       <div class="icons-container-header">
-        <h3>Icons</h3>
-        <button class="slide-icon-close">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-         `;
+    const library = libraries.find(l => l.id === currentLibraryId);
 
-    const iconsList = document.createElement('ul');
-    iconsList.className = 'icons-list';
+    // ---- header ----------------------------------------------------------
+    const header = document.createElement('div');
+    header.className = 'icons-container-header';
+    header.innerHTML = `
+      <h3>Icons</h3>
+      <button class="slide-icon-close" title="Close"><i class="fas fa-times"></i></button>
+    `;
+    header.querySelector('.slide-icon-close')
+      .addEventListener('click', () => container.classList.add('hidden'));
+    container.appendChild(header);
 
-    imageFiles.forEach((iconFile, index) => {
-      const iconItem = document.createElement('li');
-      iconItem.className = 'icon-item';
-      iconItem.dataset.index = index;
+    // ---- library switcher ------------------------------------------------
+    const bar = document.createElement('div');
+    bar.className = 'library-bar';
 
-      const iconPath = `./assets/board_icons/${iconFile}`;
+    const select = document.createElement('select');
+    select.className = 'library-select';
+    for (const lib of libraries) {
+      const opt = document.createElement('option');
+      opt.value = lib.id;
+      opt.textContent = lib.name;
+      if (lib.id === currentLibraryId) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener('change', async () => {
+      currentLibraryId = select.value;
+      await renderIconPanel();
+    });
+    bar.appendChild(select);
 
-      iconItem.innerHTML = `
-      <div class="icon-info" data-index="${index}">
-        <img class="icon-thumbnail" src="${iconPath}" alt="${iconFile}" title="${iconFile}">
-        <div class="icon-details">
-          <h5 class="icon-name">${iconFile}</h5>
-          <p class="icon-type">Icon</p>
-        </div>
+    const addLibBtn = document.createElement('button');
+    addLibBtn.className = 'library-add';
+    addLibBtn.title = 'New library';
+    addLibBtn.textContent = '+';
+    addLibBtn.addEventListener('click', () => showNewLibraryForm(container));
+    bar.appendChild(addLibBtn);
+
+    container.appendChild(bar);
+
+    if (library && library.description) {
+      const desc = document.createElement('p');
+      desc.className = 'library-description';
+      desc.textContent = library.description;
+      container.appendChild(desc);
+    }
+
+    // ---- actions for custom libraries ------------------------------------
+    if (library && !library.builtIn) {
+      const actions = document.createElement('div');
+      actions.className = 'library-actions';
+
+      const importBtn = document.createElement('button');
+      importBtn.className = 'library-import';
+      importBtn.textContent = 'Add icons…';
+      importBtn.addEventListener('click', () => pickAndImportIcons(library.id));
+      actions.appendChild(importBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'library-delete';
+      delBtn.textContent = 'Delete library';
+      delBtn.addEventListener('click', async () => {
+        await iconLibrary.deleteLibrary(library.id);
+        currentLibraryId = BUILTIN_ID;
+        await renderIconPanel();
+      });
+      actions.appendChild(delBtn);
+
+      container.appendChild(actions);
+    }
+
+    // ---- icons -----------------------------------------------------------
+    const wrapper = document.createElement('div');
+    wrapper.className = 'icons-content-wrapper';
+
+    const icons = await iconLibrary.listIcons(currentLibraryId);
+
+    if (icons.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'no-icons-message';
+      empty.textContent = library && library.builtIn
+        ? 'No icons available.'
+        : 'No icons yet — use “Add icons…” to bring some in.';
+      wrapper.appendChild(empty);
+    } else {
+      const list = document.createElement('ul');
+      list.className = 'icons-list';
+
+      for (const icon of icons) {
+        const source = icon.src || icon.data;
+
+        const item = document.createElement('li');
+        item.className = 'icon-item';
+        item.innerHTML = `
+          <div class="icon-info">
+            <img class="icon-thumbnail" src="${source}" alt="${icon.name}" title="${icon.name}">
+          </div>
+        `;
+
+        const thumb = item.querySelector('.icon-thumbnail');
+        if (thumb) thumb.draggable = false;
+        item.draggable = false;
+
+        const place = { source, libraryId: icon.libraryId, iconId: icon.id };
+
+        item.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          iconDrag.start(place, e);
+        });
+
+        item.addEventListener('click', () => {
+          const rect = ui.canvas.getBoundingClientRect();
+          const centre = CoordinateUtils.screenToWorld(rect.width / 2, rect.height / 2);
+          insertIconAt(place, centre.x, centre.y);
+        });
+
+        list.appendChild(item);
+      }
+
+      wrapper.appendChild(list);
+    }
+
+    container.appendChild(wrapper);
+  }
+
+  /** Inline form for naming a new library — no modal dialogs. */
+  function showNewLibraryForm(container) {
+    if (container.querySelector('.library-form')) return;
+
+    const form = document.createElement('form');
+    form.className = 'library-form';
+    form.innerHTML = `
+      <input class="library-name-input" type="text" placeholder="Library name" required>
+      <textarea class="library-desc-input" rows="2" placeholder="Description (optional)"></textarea>
+      <div class="library-form-actions">
+        <button type="submit" class="library-create">Create</button>
+        <button type="button" class="library-cancel">Cancel</button>
       </div>
     `;
 
-      // Add click handler to select icon
-      // Drag an icon onto the canvas and it lands where you drop it.
-      // The native image drag is turned off so it cannot hijack the gesture.
-      const thumb = iconItem.querySelector('.icon-thumbnail');
-      if (thumb) thumb.draggable = false;
-      iconItem.draggable = false;
+    form.querySelector('.library-cancel')
+      .addEventListener('click', () => form.remove());
 
-      iconItem.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        iconDrag.start(iconPath, e);
-      });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = form.querySelector('.library-name-input').value;
+      const description = form.querySelector('.library-desc-input').value;
+      if (!name.trim()) return;
 
-      // Click still works, dropping the icon in the middle of the view.
-      iconItem.addEventListener('click', () => {
-        const rect = ui.canvas.getBoundingClientRect();
-        const centre = CoordinateUtils.screenToWorld(rect.width / 2, rect.height / 2);
-        insertIconAt(iconPath, centre.x, centre.y);
-      });
-
-      iconsList.appendChild(iconItem);
+      const library = await iconLibrary.createLibrary(name, description);
+      currentLibraryId = library.id;
+      await renderIconPanel();
+      pickAndImportIcons(library.id);
     });
 
-    // Create wrapper for scrollable content
-    const contentWrapper = document.createElement('div');
-    contentWrapper.className = 'icons-content-wrapper';
-    contentWrapper.appendChild(iconsList);
-
-    // Clear and populate container
-    ui.slideIconContainer.innerHTML = '';
-    ui.slideIconContainer.appendChild(containerHeader);
-    ui.slideIconContainer.appendChild(contentWrapper);
+    const bar = container.querySelector('.library-bar');
+    bar.insertAdjacentElement('afterend', form);
+    form.querySelector('.library-name-input').focus();
   }
+
+  /** Open a file picker and import whatever images are chosen. */
+  function pickAndImportIcons(libraryId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.addEventListener('change', async () => {
+      const files = Array.from(input.files || []);
+      input.remove();
+      if (files.length === 0) return;
+
+      UIManager.showSaveStatus(`Importing ${files.length}…`);
+
+      let added = 0;
+      for (const file of files) {
+        try {
+          const prepared = await importImageFile(file);
+          await iconLibrary.addIcon(libraryId, prepared);
+          added++;
+        } catch (err) {
+          console.error('Could not import', file.name, err);
+        }
+      }
+
+      UIManager.showSaveStatus(
+        added === files.length
+          ? `Imported ${added}`
+          : `Imported ${added} of ${files.length}`,
+        added !== files.length
+      );
+
+      await renderIconPanel();
+    });
+
+    input.click();
+  }
+
 
   ui.slideIconBtn.addEventListener('click', async (e) => {
     e.stopPropagation();

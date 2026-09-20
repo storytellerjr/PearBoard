@@ -130,6 +130,15 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 **Drag and drop**
 - Icons are dragged onto the board and land where they are dropped, tracked with pointer events so it works with a mouse, a trackpad or a touchscreen
 
+**Your own icon libraries**
+- Icons can be imported from a local folder into named libraries with a description, and switched between in the panel
+- Imported art is scaled to 512px on its longest side on the way in
+- Placed icons reference a library and icon id rather than a file path — a path only ever resolves on the machine that made it, so it could never have reached a peer or survived the folder being moved
+- Peer sharing of imported icons is not built yet; they work on your own boards
+
+**Typing works everywhere**
+- Space was swallowed globally to stop the page scrolling, and single-key tool shortcuts fired regardless of focus, so no text field on the board accepted a space and `e` switched to the eraser mid-word
+
 **Work that survives closing the window**
 - Auto-save on a debounce after drawing stops, and on window close
 - Boards restore automatically when rejoining a room
