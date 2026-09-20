@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 14:14:52'
+export const BUILD_STAMP = 'build 14:21:00'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -375,9 +375,14 @@ export class CanvasManager {
     });
 
     ui.canvas.addEventListener('mouseup', () => {
-      if (state.isSpacePressed) {
+      // Clear the flag whatever the space key is doing now. Guarding this on
+      // isSpacePressed left isDragging stuck true whenever space was released
+      // before the mouse button, and a stuck flag sends every later mousemove
+      // down the dragging branch, so hover stopped working until the next
+      // click happened to reset it.
+      if (state.isDragging) {
         state.isDragging = false;
-        ui.canvas.style.cursor = 'grab';
+        InputHandler.updateCursor(state.hoverId);
       }
     });
 
