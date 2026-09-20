@@ -1,3 +1,11 @@
 node_modules/
 .DS_STORE
 src/
+
+# Private notes — these live outside the repo, in AVA SKILLS/pearboard_private/.
+# Listed here only in case a copy is ever dropped in by accident.
+PEARBOARD_ADVANCED_FEATURES.md
+Handover_Thread_*.md
+HANDOFF_*.md
+*_private*.md
+pearboard_private/
