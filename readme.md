@@ -67,8 +67,23 @@ pear://keet/yfoik1wj341giyzf7tyr5efkyfdtrtfugamgw476muitdyfug6np4hcheycra1marpmu
 
 ## 🤝 Contributing
 
-Pull requests are welcome.  
-For major changes, please open an issue first to discuss what you would like to change.
+Pull requests are very welcome! 🙌  
+For major changes, please [open an issue](https://github.com/storytellerjr/PearBoard/issues) first so we can talk it through.
+
+Not a coder? There's plenty else that helps: 🐛 report a bug, 💡 suggest a feature, 🎨 send design ideas, or ⭐ star the repo so others find it.
+
+## ⚡ Support the development
+
+PearBoard is free, open source, and has no servers behind it — just peers. 🍐  
+If it's useful to you and you'd like to help it keep growing, you can send a few sats over Lightning:
+
+```
+blink.sv/storyteller
+```
+
+👉 **Please put `PearBoard` in the payment message**, so I know which project the support is for. 🧡
+
+Every sat goes straight into development time — new features, bug fixes, and keeping the boards drawing smoothly. Thank you! 🙏
 
 ## 🧭 Project status and history
 
