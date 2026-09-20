@@ -45,6 +45,11 @@ or
 pear run -d .
 ```
 
+## 📋 Build log
+
+**[What is in each build →](./BUILDS.md)** — every change ships in a numbered
+build, and release notes are written from this.
+
 ## 📖 User guide
 
 **[How to use PearBoard →](./USER_GUIDE.md)** — tools, arrows that attach to
