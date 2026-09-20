@@ -816,7 +816,8 @@ input[type="range"]::-ms-fill-upper {
 /* Build stamp — which build is this window running? */
 #build-stamp {
   position: fixed;
-  top: 8px;
+  /* Bottom-left, clear of the macOS window buttons at the top-left. */
+  bottom: 8px;
   left: 8px;
   padding: 3px 8px;
   border-radius: 4px;
@@ -1548,4 +1549,62 @@ input[type="range"]::-ms-fill-upper {
 
 #exit-app:hover .menu-icon {
   color: #b02020;
+}
+
+/* ---- Board bar -----------------------------------------------------------
+   The board's name and the two ways out, always visible while on a board.
+   The options panel behind the gear was too well hidden to find. */
+
+#board-bar {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 1300;
+  font-size: 12px;
+}
+
+#board-bar.hidden { display: none !important; }
+
+#board-name {
+  font-weight: 600;
+  color: #2b2f36;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#board-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #444;
+  background: #f1f0f4;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#board-bar button:hover { background: #e7e5ec; }
+#board-exit:hover { background: #fde2e2; color: #b02020; }
+
+/* Keep the stamp clear of both the window buttons and the zoom readout */
+#build-stamp {
+  bottom: auto;
+  left: auto;
+  top: 8px;
+  right: 8px;
 }

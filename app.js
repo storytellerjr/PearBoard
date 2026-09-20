@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 16:46:41'
+export const BUILD_STAMP = 'build 17:41:16'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -503,6 +503,42 @@ export class CanvasManager {
     state.panY = mouseY - (worldY * newZoom);
     const scalePercent = Math.round(newZoom * 100);
     ui.scaleDisplay.textContent = `${scalePercent}%`;
+    this.clampPan();
+    state.requestRender();
+    CursorManager.handleCanvasTransform();
+  }
+
+  /**
+   * Zoom about the centre of the view, as the keyboard shortcuts expect.
+   * The wheel zooms about the pointer; there is no pointer here.
+   */
+  static zoomBy(factor) {
+    const rect = ui.canvas.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
+    const worldX = (cx - state.panX) / state.zoom;
+    const worldY = (cy - state.panY) / state.zoom;
+
+    const newZoom = Math.min(8, Math.max(0.1, state.zoom * factor));
+    state.zoom = newZoom;
+    state.panX = cx - worldX * newZoom;
+    state.panY = cy - worldY * newZoom;
+
+    if (ui.scaleDisplay) {
+      ui.scaleDisplay.textContent = `${Math.round(newZoom * 100)}%`;
+    }
+
+    this.clampPan();
+    state.requestRender();
+    CursorManager.handleCanvasTransform();
+  }
+
+  static resetZoom() {
+    state.zoom = 1;
+    state.panX = 0;
+    state.panY = 0;
+    if (ui.scaleDisplay) ui.scaleDisplay.textContent = '100%';
     this.clampPan();
     state.requestRender();
     CursorManager.handleCanvasTransform();
@@ -2600,6 +2636,25 @@ class InputHandler {
       if (isTypingTarget(e.target)) return;
       const key = e.key.toLowerCase();
 
+      // Zoom — Cmd/Ctrl with + or - , and 0 to reset.
+      if (e.metaKey || e.ctrlKey) {
+        if (key === '=' || key === '+') {
+          e.preventDefault();
+          CanvasManager.zoomBy(1.2);
+          return;
+        }
+        if (key === '-' || key === '_') {
+          e.preventDefault();
+          CanvasManager.zoomBy(1 / 1.2);
+          return;
+        }
+        if (key === '0') {
+          e.preventDefault();
+          CanvasManager.resetZoom();
+          return;
+        }
+      }
+
       // Undo/Redo
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && key === 'z') {
         e.preventDefault();
@@ -3568,14 +3623,14 @@ class UIManager {
     ui.undo.addEventListener('click', () => HistoryManager.undo());
     ui.redo.addEventListener('click', () => HistoryManager.redo());
     ui.clear.addEventListener('click', () => DocumentManager.clearAll(true));
-    const leaveBtn = document.querySelector('#leave-room');
-    if (leaveBtn) {
-      leaveBtn.addEventListener('click', () => SessionManager.leaveRoom());
+    const barRooms = document.querySelector('#board-rooms');
+    if (barRooms) {
+      barRooms.addEventListener('click', () => SessionManager.leaveRoom());
     }
 
-    const exitBtn = document.querySelector('#exit-app');
-    if (exitBtn) {
-      exitBtn.addEventListener('click', () => SessionManager.exitApp());
+    const barExit = document.querySelector('#board-exit');
+    if (barExit) {
+      barExit.addEventListener('click', () => SessionManager.exitApp());
     }
 
     ui.save.addEventListener('click', () => this.saveCanvasAsPNG());
@@ -4079,6 +4134,8 @@ class UIManager {
 
   static showSetup() {
     if (ui.slideIconContainer) ui.slideIconContainer.classList.add('hidden');
+    const bar = document.querySelector('#board-bar');
+    if (bar) bar.classList.add('hidden');
     ui.setup.classList.remove('hidden');
     ui.loading.classList.add('hidden');
     ui.toolbar.classList.add('hidden');
@@ -4188,6 +4245,13 @@ class SessionManager {
 
       await NetworkManager.initSwarm(topicHex);
       UIManager.showWorkspace();
+
+      // Name the board on the bar, so it is always clear which one this is.
+      const record = await room.getRoom(topicHex);
+      const bar = document.querySelector('#board-bar');
+      const nameEl = document.querySelector('#board-name');
+      if (nameEl) nameEl.textContent = (record && record.roomName) || 'Untitled board';
+      if (bar) bar.classList.remove('hidden');
       CanvasManager.resizeCanvas();
     } catch (error) {
       console.error('Failed to start networking:', error);

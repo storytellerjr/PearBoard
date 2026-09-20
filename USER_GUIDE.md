@@ -25,6 +25,22 @@ You will see their cursor move as they draw, and they will see yours.
 
 ---
 
+## 🧭 Finding your way around
+
+A small bar sits at the **bottom of every board** showing its name, with two
+buttons:
+
+- **← Boards** — back to your list of boards
+- **Exit** — close PearBoard
+
+Both save your work first.
+
+**Zoom:** `⌘ +` in, `⌘ −` out, `⌘ 0` back to 100%. Scroll to zoom about the
+pointer, hold **Space** and drag to pan.
+
+**Two boards at once?** Run the app twice — each window is its own instance and
+can be on a different board.
+
 ## 🖱️ Selecting and moving: click the pointer first
 
 **This is the one thing worth knowing before anything else.**
