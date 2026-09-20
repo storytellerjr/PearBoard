@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 13:49:31'
+export const BUILD_STAMP = 'build 13:56:51'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -1037,7 +1037,8 @@ class ObjectRenderer {
   /** Dash pattern for a stroke style, scaled so it reads at any zoom. */
   static applyStrokeStyle(style, size) {
     const ctx = state.ctx;
-    const unit = Math.max(1, size || 2);
+    // Scaled off a minimum so dashes stay visible on a thin stroke.
+    const unit = Math.max(2.5, (size || 2) * 1.6);
 
     switch (style) {
       case 'dashed':
@@ -1076,7 +1077,7 @@ class ObjectRenderer {
 
   static sloppyAmount(obj) {
     const level = obj.sloppiness ?? 0;
-    return level === 0 ? 0 : level === 1 ? 1.6 : 3.2;
+    return level === 0 ? 0 : level === 1 ? 1.2 : 2.4;
   }
 
   /**
@@ -1121,16 +1122,20 @@ class ObjectRenderer {
     const amount = this.sloppyAmount(obj);
     const baseAlpha = ctx.globalAlpha;
 
+    const baseWidth = ctx.lineWidth;
+
     for (let pass = 0; pass < 2; pass++) {
       ctx.beginPath();
       edges.forEach(([x1, y1, x2, y2], i) => {
         this.sloppyEdge(x1, y1, x2, y2, `${obj.id}:${pass}:${i}`, amount);
       });
-      ctx.globalAlpha = baseAlpha * (pass === 0 ? 1 : 0.7);
+      ctx.lineWidth = pass === 0 ? baseWidth : baseWidth * 0.7;
+      ctx.globalAlpha = baseAlpha * (pass === 0 ? 1 : 0.4);
       ctx.stroke();
     }
 
     ctx.globalAlpha = baseAlpha;
+    ctx.lineWidth = baseWidth;
   }
 
   /**
@@ -1159,7 +1164,7 @@ class ObjectRenderer {
     // First pass carries the fill; both passes carry the line.
     const passes = [
       { seed: 0, alpha: 1 },
-      { seed: 1, alpha: 0.75 }
+      { seed: 1, alpha: 0.4 }
     ];
 
     const baseAlpha = ctx.globalAlpha;
@@ -1171,6 +1176,8 @@ class ObjectRenderer {
     const b = GeometryUtils.getBounds(obj);
     const cx = b.x + b.w / 2;
     const cy = b.y + b.h / 2;
+
+    const baseWidth = ctx.lineWidth;
 
     passes.forEach((pass, index) => {
       const d = this.wobble(obj.id, pass.seed, amount);
@@ -1186,10 +1193,16 @@ class ObjectRenderer {
 
       if (index === 0 && !skipFill) this.fillShape(obj);
 
+      // The overlay pass is thinner and much fainter. Stroking twice at full
+      // width and opacity doubles the apparent weight and reads as a hard,
+      // heavy line rather than a hand-drawn one.
+      ctx.lineWidth = index === 0 ? baseWidth : baseWidth * 0.7;
       ctx.globalAlpha = baseAlpha * pass.alpha;
       ctx.stroke();
       ctx.restore();
     });
+
+    ctx.lineWidth = baseWidth;
 
     ctx.globalAlpha = baseAlpha;
   }
@@ -1251,7 +1264,7 @@ class ObjectRenderer {
   static renderArrowHead(tip, tangent, obj) {
     const ctx = state.ctx;
     const angle = Math.atan2(tangent.y, tangent.x);
-    const size = Math.max(10, (obj.size || 2) * 3.5);
+    const size = Math.max(11, (obj.size || 2) * 5);
     const spread = Math.PI / 7;
 
     // The head is solid, never dashed.

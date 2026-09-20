@@ -65,7 +65,7 @@ export const state = {
   // Defaults chosen to match how boards are actually drawn here: a soft green
   // box with a black hand-drawn outline and rounded corners.
   strokeColor: '#1e1e1e',
-  strokeSize: 6,          // medium
+  strokeSize: 2,          // medium — thin 1, medium 2, bold 4
   strokeOpacity: 1,
   strokeStyle: 'solid',   // solid | dashed | dotted
   backgroundColor: '#b2f2bb',

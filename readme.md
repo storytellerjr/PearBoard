@@ -139,7 +139,8 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 **Shapes that look drawn by hand**
 - Background and fill (hachure, cross-hatch, solid), rounded or sharp edges
 - The hand-drawn look comes from each edge being its own slightly bowed line that overshoots its corners, stroked twice — not from jittering points, which reads as noise
-- Sensible defaults: a soft green box with a black outline and rounded corners
+- Sensible defaults: a soft green box with a thin black outline and rounded corners
+- Stroke widths are thin (1), medium (2) and bold (4). The second, hand-drawn pass is thinner and much fainter than the first — stroking the same outline twice at full weight does not read as hand-drawn, it reads as a thick line with ragged edges
 
 **Text with a real hand-drawn font**
 - Architects Daughter is bundled (SIL Open Font License), so a board renders correctly with no network — this is a peer-to-peer app
