@@ -90,6 +90,7 @@ export const state = {
   activeId: null,
   hoverId: null,
   selectedId: null,
+  resizing: null,         // { id, handle, start, origin } while dragging a handle
   isDragging: false,
   dragStart: null,
   dragInitialPos: null,

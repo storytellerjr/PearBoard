@@ -157,6 +157,10 @@ The project could not start from a clean clone. `storage/` was listed in `.gitig
 - Properties apply to new shapes and to the current selection
 - Sloppiness is seeded from the object's id, so a shape wobbles identically on every frame and on every peer's screen
 
+**Select, move and resize**
+- A thin blue frame with corner handles; drag a corner or an edge to resize, with the opposite side staying put
+- The properties panel opens on the selected object and shows its own values; changing anything applies straight away
+
 **Select and move things**
 - A pointer tool: hover to highlight, click to select, drag to move, Delete to remove — on strokes, shapes, text and icons alike
 - Object dragging already existed but was hidden behind holding Shift, with no outline drawn and no way to discover it. Shift-drag still works with any tool

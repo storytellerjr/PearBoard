@@ -39,6 +39,7 @@ Only then does the board respond to what is under your mouse:
 | Hover a shape | It outlines faintly, and the cursor becomes a **four-way cross** |
 | Click it | The outline turns solid and its properties open on the left |
 | Drag it | It moves |
+| Drag a corner or edge | It resizes, with the opposite side staying put |
 | Press **Delete** | It is removed |
 | Click empty board | Nothing is selected any more |
 
@@ -49,6 +50,11 @@ how you tell the board whether you mean to draw or to handle what is already
 there.
 
 This is how Excalidraw behaves, and for the same reason.
+
+Selecting something puts a **thin blue frame** around it with a white square at
+each corner. Those corners, and the middle of each side, are the eight points you
+can drag to resize — the cursor turns into a double-headed arrow to show which
+way each one goes.
 
 > 💡 **Shortcut:** holding **Shift** lets you drag an object without switching
 > tools. Useful for nudging one thing mid-drawing.

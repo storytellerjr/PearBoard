@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 14:21:00'
+export const BUILD_STAMP = 'build 14:49:13'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -663,7 +663,7 @@ class ObjectRenderer {
       if (hovered) this.renderBounds(hovered, 'rgba(37, 99, 235, .35)');
 
       const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
-      if (selected) this.renderBounds(selected, 'rgba(37, 99, 235, .9)');
+      if (selected) this.renderSelection(selected);
     }
 
     this.renderSnapAnchors();
@@ -1311,6 +1311,86 @@ class ObjectRenderer {
       ctx.strokeStyle = active ? 'rgba(37, 99, 235, 1)' : 'rgba(37, 99, 235, .65)';
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  /** Half-size of a selection handle, in screen pixels. */
+  static HANDLE = 4.5;
+
+  /**
+   * The eight points a shape can be resized from: its corners and the middle
+   * of each side. Returned in world coordinates.
+   */
+  static handlePoints(obj) {
+    const b = GeometryUtils.getBounds(obj);
+    const midX = b.x + b.w / 2;
+    const midY = b.y + b.h / 2;
+
+    return {
+      nw: { x: b.x,         y: b.y },
+      n:  { x: midX,        y: b.y },
+      ne: { x: b.x + b.w,   y: b.y },
+      e:  { x: b.x + b.w,   y: midY },
+      se: { x: b.x + b.w,   y: b.y + b.h },
+      s:  { x: midX,        y: b.y + b.h },
+      sw: { x: b.x,         y: b.y + b.h },
+      w:  { x: b.x,         y: midY }
+    };
+  }
+
+  /** Which handle, if any, is under a point. Tolerance is in screen pixels. */
+  static handleAt(obj, x, y) {
+    if (!obj) return null;
+
+    const reach = (this.HANDLE + 3) / state.zoom;
+    const points = this.handlePoints(obj);
+
+    for (const [name, p] of Object.entries(points)) {
+      if (Math.abs(x - p.x) <= reach && Math.abs(y - p.y) <= reach) return name;
+    }
+    return null;
+  }
+
+  /** The resize cursor for each handle. */
+  static handleCursor(name) {
+    switch (name) {
+      case 'nw': case 'se': return 'nwse-resize';
+      case 'ne': case 'sw': return 'nesw-resize';
+      case 'n':  case 's':  return 'ns-resize';
+      case 'e':  case 'w':  return 'ew-resize';
+      default: return 'default';
+    }
+  }
+
+  /** The selected object's frame, with a square at each corner. */
+  static renderSelection(obj) {
+    const ctx = state.ctx;
+    const b = GeometryUtils.getBounds(obj);
+    const pad = 4 / state.zoom;
+
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1 / state.zoom;
+    ctx.strokeStyle = 'rgba(105, 101, 219, .9)';
+    ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+
+    // Corners only, as in the reference — the sides are draggable but bare.
+    const size = this.HANDLE / state.zoom;
+    const corners = ['nw', 'ne', 'se', 'sw'];
+    const points = this.handlePoints(obj);
+
+    ctx.fillStyle = '#ffffff';
+    for (const name of corners) {
+      const p = points[name];
+      const x = p.x + (name.includes('w') ? -pad : pad);
+      const y = p.y + (name.includes('n') ? -pad : pad);
+
+      ctx.beginPath();
+      ctx.rect(x - size, y - size, size * 2, size * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
@@ -2299,6 +2379,15 @@ class InputHandler {
     // The select tool picks an object up directly. Shift does the same with
     // any tool, which is how this worked before there was a select tool.
     if (state.tool === 'select' || event.shiftKey) {
+      // A handle on the current selection takes priority over anything under
+      // it, so a corner stays grabbable when shapes overlap.
+      const selected = state.selectedId ? state.doc.objects[state.selectedId] : null;
+      const handle = ObjectRenderer.handleAt(selected, coords.x, coords.y);
+      if (handle) {
+        this.startResizing(selected, handle, coords);
+        return;
+      }
+
       const objectId = DocumentManager.findTopObjectAt(coords.x, coords.y);
       if (objectId) {
         state.selectedId = objectId;
@@ -2425,6 +2514,11 @@ class InputHandler {
       return;
     }
 
+    if (state.resizing) {
+      this.continueResizing(coords);
+      return;
+    }
+
     if (state.drawing && state.activeId) {
       this.continuDrawing(coords);
     } else if (state.isDragging && state.activeId) {
@@ -2435,6 +2529,11 @@ class InputHandler {
   }
 
   static handleMouseUp(event) {
+    if (state.resizing) {
+      this.endResizing();
+      return;
+    }
+
     // Released after dragging a decent distance? Treat it as a drawn arrow.
     // A click barely moves, and leaves the arrow waiting for its second click.
     if (state.pendingArrowId) {
@@ -2583,12 +2682,67 @@ class InputHandler {
     });
   }
 
+  static startResizing(obj, handle, coords) {
+    const b = GeometryUtils.getBounds(obj);
+
+    state.resizing = {
+      id: obj.id,
+      handle,
+      start: coords,
+      // Work from the original box, so dragging back and forth is stable.
+      origin: { x: b.x, y: b.y, w: b.w, h: b.h }
+    };
+  }
+
+  /**
+   * Resize from the handle being dragged, keeping the opposite side pinned.
+   *
+   * Shapes are stored as x, y, w, h where w and h may be negative, so the box
+   * is normalised first and written back normalised.
+   */
+  static continueResizing(coords) {
+    const r = state.resizing;
+    const obj = state.doc.objects[r.id];
+    if (!obj) return;
+
+    const dx = coords.x - r.start.x;
+    const dy = coords.y - r.start.y;
+
+    let { x, y, w, h } = r.origin;
+
+    if (r.handle.includes('e')) w += dx;
+    if (r.handle.includes('s')) h += dy;
+    if (r.handle.includes('w')) { x += dx; w -= dx; }
+    if (r.handle.includes('n')) { y += dy; h -= dy; }
+
+    // Do not let a shape collapse through itself.
+    const MIN = 8;
+    if (w < MIN) { x = Math.min(x, x + w - MIN); w = MIN; }
+    if (h < MIN) { y = Math.min(y, y + h - MIN); h = MIN; }
+
+    DocumentManager.updateObject(r.id, { x, y, w, h }, true);
+  }
+
+  static endResizing() {
+    state.resizing = null;
+  }
+
   static updateHover(coords, isShiftPressed) {
     const objectId = DocumentManager.findTopObjectAt(coords.x, coords.y);
 
     if (state.hoverId !== objectId) {
       state.hoverId = objectId;
       state.requestRender();
+    }
+
+    // A handle on the selection wins: show which way it will resize.
+    if (state.tool === 'select' && state.selectedId) {
+      const selected = state.doc.objects[state.selectedId];
+      const handle = ObjectRenderer.handleAt(selected, coords.x, coords.y);
+      if (handle) {
+        ui.canvas.style.cursor = ObjectRenderer.handleCursor(handle);
+        return;
+      }
     }
 
     // The cursor belongs to updateCursor(). This used to set it directly,
