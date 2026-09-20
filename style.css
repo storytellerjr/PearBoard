@@ -1608,3 +1608,20 @@ input[type="range"]::-ms-fill-upper {
   top: 8px;
   right: 8px;
 }
+
+/* The board bar sits below the tool icons, not over them. Both were pinned to
+   the bottom centre, so the toolbar is lifted to make room. */
+.btn--container {
+  bottom: 56px;
+}
+
+#board-bar {
+  bottom: 10px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+@media (max-height: 620px) {
+  .btn--container { bottom: 48px; }
+  #board-bar { bottom: 6px; }
+}

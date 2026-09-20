@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 17:41:16'
+export const BUILD_STAMP = 'build 17:43:42'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
