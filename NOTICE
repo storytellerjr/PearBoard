@@ -1,0 +1,27 @@
+PearBoard
+Copyright 2025 Rohan Chaudhary
+Copyright 2026 Storytellerjr
+
+This product includes software originally developed by Rohan Chaudhary
+(https://github.com/Codesamp-Rohan/PearBoard), released publicly in
+September 2025 and last updated by the original author on 7 November 2025.
+
+Maintenance of the project passed to Storytellerjr
+(https://github.com/storytellerjr/PearBoard) in September 2026, after the
+original author stopped maintaining it.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+--------------------------------------------------------------------------
+Note on licensing
+--------------------------------------------------------------------------
+The original repository declared its licence inconsistently: package.json
+declared "Apache-2.0" while readme.md stated the MIT License and linked to a
+LICENSE file that was never committed in any branch or commit of the project's
+history.
+
+The original author could not be reached to clarify. This repository therefore
+follows Apache-2.0 — the declaration carried in package.json across every
+commit, and the stricter of the two, so that the original author's terms are
+honoured under either reading. No relicensing has taken place, and the original
+author's copyright is retained above.
