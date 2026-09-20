@@ -158,6 +158,19 @@ export class Room {
         return null;
     }
 
+    /** Store settings that belong to the board itself, like its paper. */
+    async updateRoomMeta(roomKey, patch) {
+        if (!roomKey) return null;
+        await this.ensureStorage();
+
+        const existing = await roomDB.get(roomKey);
+        const base = existing ? existing.value : { roomKey, createdAt: Date.now() };
+        const updated = { ...base, ...patch, roomKey, lastModified: Date.now() };
+
+        await roomDB.put(roomKey, updated);
+        return updated;
+    }
+
     async deleteState(roomKey, index) {
         try {
             await this.ensureStorage();

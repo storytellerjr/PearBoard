@@ -12,6 +12,15 @@ written from.
 
 ## 20 September 2026 — taking the project over
 
+### 18:06 · Canvas types
+Four papers, chosen from the board bar and remembered per board: **Dots** (as
+before), **Lines** for handwriting with a margin rule, **Plain paper** with
+nothing on it, and **Storyboard** — a header band for a title and log line, then
+rows of faint panels with a circle at each lower left for a shot number.
+
+Changing the paper changes only the background. Nothing drawn is touched, so
+switching is always safe.
+
 ### 17:43 · Bottom edge stacked
 `898a98a` — The board bar and the tool icons were both pinned to the bottom
 centre, so the board's name sat over the squares and circles. Bottom edge now

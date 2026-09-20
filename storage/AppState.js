@@ -45,6 +45,7 @@ export const state = {
   DPR: (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
   dirty: true,
   showGrid: true,
+  canvasType: 'dots',     // dots | lines | plain | storyboard
 
   // ---- view (pan and zoom) ------------------------------------------------
   zoom: 1,

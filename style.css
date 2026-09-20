@@ -1625,3 +1625,25 @@ input[type="range"]::-ms-fill-upper {
   .btn--container { bottom: 48px; }
   #board-bar { bottom: 6px; }
 }
+
+/* Canvas type picker in the board bar */
+.board-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.board-bar-label {
+  color: #6b6b75;
+  font-size: 11px;
+}
+
+#canvas-type {
+  font-size: 11px;
+  font-family: inherit;
+  padding: 4px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}

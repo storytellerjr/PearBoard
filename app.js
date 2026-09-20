@@ -41,7 +41,7 @@ export function isTypingTarget (target) {
     target.isContentEditable === true
 }
 
-export const BUILD_STAMP = 'build 17:43:42'
+export const BUILD_STAMP = 'build 18:06:29'
 
 document.addEventListener('DOMContentLoaded', () => {
   // Dev builds only: makes it obvious at a glance which build a window is
@@ -607,7 +607,131 @@ export class CanvasManager {
 
 
 class GridRenderer {
+  /**
+   * The paper the board is drawn on.
+   *
+   * Only the background changes — nothing that has been drawn is touched, so
+   * switching paper is always safe.
+   */
   static render(ctx, scale, translateX, translateY) {
+    const type = state.canvasType || 'dots';
+
+    if (type === 'plain') return;
+
+    if (type === 'lines') {
+      this.renderLines(ctx, scale, translateX, translateY);
+      return;
+    }
+
+    if (type === 'storyboard') {
+      this.renderStoryboard(ctx, scale, translateX, translateY);
+      return;
+    }
+
+    this.renderDots(ctx, scale, translateX, translateY);
+  }
+
+  /** Ruled lines, for writing by hand. */
+  static renderLines(ctx, scale, translateX, translateY) {
+    const viewWidth = ui.canvas.clientWidth;
+    const viewHeight = ui.canvas.clientHeight;
+
+    const leftWorld = -state.panX / state.zoom;
+    const topWorld = -state.panY / state.zoom;
+    const rightWorld = leftWorld + viewWidth / state.zoom;
+    const bottomWorld = topWorld + viewHeight / state.zoom;
+
+    const step = 32;
+    const startY = Math.floor(topWorld / step) * step;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.strokeStyle = 'rgba(40, 90, 150, 0.16)';
+    ctx.lineWidth = 1;
+
+    for (let y = startY; y <= bottomWorld; y += step) {
+      const screenY = Math.round(scale * y + translateY) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, screenY);
+      ctx.lineTo(viewWidth, screenY);
+      ctx.stroke();
+    }
+
+    // A margin rule, as on writing paper.
+    const marginX = Math.round(scale * 80 + translateX) + 0.5;
+    if (marginX > 0 && marginX < viewWidth) {
+      ctx.strokeStyle = 'rgba(200, 80, 80, 0.25)';
+      ctx.beginPath();
+      ctx.moveTo(marginX, 0);
+      ctx.lineTo(marginX, viewHeight);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+    ctx.setTransform(scale, 0, 0, scale, translateX, translateY);
+  }
+
+  /**
+   * Panels in a strip, for telling a story in pictures.
+   *
+   * A band across the top for the film's name and log line, then rows of
+   * panels, each with a small circle at its lower left for a shot number.
+   */
+  static renderStoryboard(ctx, scale, translateX, translateY) {
+    const PANEL_W = 420;
+    const PANEL_H = 260;
+    const GAP = 40;
+    const HEADER_H = 150;
+    const COLUMNS = 3;
+
+    ctx.save();
+    ctx.lineWidth = 1.5 / state.zoom;
+
+    // Header band
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+    ctx.beginPath();
+    ctx.rect(GAP, GAP, COLUMNS * PANEL_W + (COLUMNS - 1) * GAP, HEADER_H);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.font = `${20}px ${FONT_STACKS.hand}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Title', GAP + 20, GAP + 22);
+    ctx.fillText('Log line', GAP + 20, GAP + 78);
+
+    // Panels
+    const top = GAP + HEADER_H + GAP;
+    for (let row = 0; row < 6; row++) {
+      for (let col = 0; col < COLUMNS; col++) {
+        const x = GAP + col * (PANEL_W + GAP);
+        const y = top + row * (PANEL_H + GAP);
+
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.14)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.015)';
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(x, y, PANEL_W, PANEL_H, 10);
+        } else {
+          ctx.rect(x, y, PANEL_W, PANEL_H);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // The circle for a shot number — left empty for now.
+        ctx.beginPath();
+        ctx.arc(x + 26, y + PANEL_H - 26, 16, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  static renderDots(ctx, scale, translateX, translateY) {
     const viewWidth = ui.canvas.clientWidth;
     const viewHeight = ui.canvas.clientHeight;
 
@@ -3623,6 +3747,23 @@ class UIManager {
     ui.undo.addEventListener('click', () => HistoryManager.undo());
     ui.redo.addEventListener('click', () => HistoryManager.redo());
     ui.clear.addEventListener('click', () => DocumentManager.clearAll(true));
+    const canvasType = document.querySelector('#canvas-type');
+    if (canvasType) {
+      canvasType.addEventListener('change', async () => {
+        state.canvasType = canvasType.value;
+        state.requestRender();
+
+        // Remembered per board, and nothing drawn is touched.
+        if (state.topicKey) {
+          try {
+            await room.updateRoomMeta(state.topicKey, { canvasType: state.canvasType });
+          } catch (err) {
+            console.error('Could not save the canvas type:', err);
+          }
+        }
+      });
+    }
+
     const barRooms = document.querySelector('#board-rooms');
     if (barRooms) {
       barRooms.addEventListener('click', () => SessionManager.leaveRoom());
@@ -4252,6 +4393,10 @@ class SessionManager {
       const nameEl = document.querySelector('#board-name');
       if (nameEl) nameEl.textContent = (record && record.roomName) || 'Untitled board';
       if (bar) bar.classList.remove('hidden');
+
+      state.canvasType = (record && record.canvasType) || 'dots';
+      const typeSelect = document.querySelector('#canvas-type');
+      if (typeSelect) typeSelect.value = state.canvasType;
       CanvasManager.resizeCanvas();
     } catch (error) {
       console.error('Failed to start networking:', error);
